@@ -13,13 +13,14 @@ categories = ["wasm", "api-bindings", "virtualization"]
 authors = ["Eric Evans <ciresnave@gmail.com>"]
 exclude = [
     "target/*",
-    "fixtures/*",
     "benches/*",
     "examples/*",
     "tests/*",
     ".git*",
-    "*.md",
-    "LICENSE",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "API.md",
+    "TRAIT_DESIGN.md",
 ]
 
 [dependencies]

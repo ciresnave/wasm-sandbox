@@ -1,0 +1,131 @@
+// MCP Server Wrapper Template
+// This template is used to wrap an MCP server in a WebAssembly module
+
+use std::sync::{Arc, Mutex};
+use std::process::Command;
+use std::path::PathBuf;
+use std::env;
+
+// Configuration
+const SERVER_EXECUTABLE: &str = "{{server_executable}}";
+const SERVER_PORT: u16 = {{server_port}};
+const SERVER_HOST: &str = "{{server_host}}";
+const SCHEMA_PATH: &str = "{{schema_path}}";
+
+// Global state
+static mut SERVER_INSTANCE: Option<Arc<Mutex<ServerInstance>>> = None;
+
+struct ServerInstance {
+    running: bool,
+    port: u16,
+    process: Option<std::process::Child>,
+}
+
+// Initialize the module
+#[unsafe(no_mangle)]
+pub extern "C" fn _initialize() {
+    unsafe {
+        SERVER_INSTANCE = Some(Arc::new(Mutex::new(ServerInstance {
+            running: false,
+            port: SERVER_PORT,
+            process: None,
+        })));
+    }
+}
+
+// Start the server
+#[unsafe(no_mangle)]
+pub extern "C" fn start(port: u16) -> u16 {
+    let instance = unsafe { SERVER_INSTANCE.as_ref().unwrap().clone() };
+    let mut instance = instance.lock().unwrap();
+
+    if instance.running {
+        return instance.port;
+    }
+
+    // Use the provided port or default
+    let actual_port = if port > 0 { port } else { SERVER_PORT };
+    instance.port = actual_port;
+
+    // Set environment variables for the MCP server
+    env::set_var("MCP_PORT", actual_port.to_string());
+    env::set_var("MCP_MODE", "production");
+
+    // Build command to start the server
+    let mut command = Command::new(SERVER_EXECUTABLE);
+    command.arg("--port").arg(actual_port.to_string());
+    command.arg("--host").arg(SERVER_HOST);
+    
+    if !SCHEMA_PATH.is_empty() {
+        command.arg("--schema").arg(SCHEMA_PATH);
+    }
+
+    // Start the server
+    match command.spawn() {
+        Ok(child) => {
+            instance.process = Some(child);
+            instance.running = true;
+            actual_port
+        }
+        Err(_) => 0, // Return 0 on error
+    }
+}
+
+// Stop the server
+#[no_mangle]
+pub extern "C" fn stop() {
+    let instance = unsafe { SERVER_INSTANCE.as_ref().unwrap().clone() };
+    let mut instance = instance.lock().unwrap();
+
+    if !instance.running {
+        return;
+    }
+
+    // Stop the server
+    if let Some(mut child) = instance.process.take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    instance.running = false;
+}
+
+// Get server status
+#[no_mangle]
+pub extern "C" fn status() -> bool {
+    let instance = unsafe { SERVER_INSTANCE.as_ref().unwrap().clone() };
+    let instance = instance.lock().unwrap();
+    instance.running
+}
+
+// Get server port
+#[no_mangle]
+pub extern "C" fn get_port() -> u16 {
+    let instance = unsafe { SERVER_INSTANCE.as_ref().unwrap().clone() };
+    let instance = instance.lock().unwrap();
+    instance.port
+}
+
+// Get schema path
+#[no_mangle]
+pub extern "C" fn get_schema_path() -> *const u8 {
+    let path = SCHEMA_PATH.as_bytes();
+    let ptr = path.as_ptr();
+    std::mem::forget(path);
+    ptr
+}
+
+// Get schema path length
+#[no_mangle]
+pub extern "C" fn get_schema_path_len() -> usize {
+    SCHEMA_PATH.len()
+}
+
+// Main function
+fn main() {
+    // Initialize
+    _initialize();
+    
+    // The actual logic will be handled by the host through function calls
+    println!("MCP server wrapper initialized");
+}

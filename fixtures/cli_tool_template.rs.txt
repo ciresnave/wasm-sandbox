@@ -1,0 +1,108 @@
+//! CLI Tool template for WASM-Sandbox
+//!
+//! This template generates a WASM module that provides a CLI tool interface
+//! for running command-line applications in a sandboxed environment.
+
+use serde::{Deserialize, Serialize};
+
+/// CLI execution result
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CliResult {
+    /// Exit code
+    pub exit_code: i32,
+    /// Standard output
+    pub stdout: String,
+    /// Standard error
+    pub stderr: String,
+    /// Execution time in milliseconds
+    pub execution_time_ms: u64,
+}
+
+/// CLI configuration
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CliConfig {
+    /// Working directory
+    pub working_dir: Option<String>,
+    /// Environment variables
+    pub env: Option<std::collections::HashMap<String, String>>,
+    /// Maximum execution time in seconds
+    pub timeout_seconds: Option<u64>,
+    /// Maximum memory usage in bytes
+    pub max_memory_bytes: Option<usize>,
+}
+
+/// Initialize the CLI tool
+#[no_mangle]
+pub extern "C" fn initialize(config_json: *const u8, config_len: usize) -> bool {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+    true
+}
+
+/// Run the CLI tool with arguments
+/// 
+/// # Arguments
+/// * `args_json` - JSON-encoded array of command-line arguments
+/// 
+/// # Returns
+/// True if execution started successfully
+#[no_mangle]
+pub extern "C" fn run(args_json: *const u8, args_len: usize) -> bool {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+    true
+}
+
+/// Check if the tool is currently running
+#[no_mangle]
+pub extern "C" fn is_running() -> bool {
+    // Implementation would go here
+    false
+}
+
+/// Get the execution result
+#[no_mangle]
+pub extern "C" fn get_result(
+    result_ptr: *mut u8,
+    result_cap: usize
+) -> usize {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+    0
+}
+
+/// Stop the running tool (if applicable)
+#[no_mangle]
+pub extern "C" fn stop() -> bool {
+    // Implementation would go here
+    true
+}
+
+/// Get tool metadata/information
+#[no_mangle]
+pub extern "C" fn get_info(
+    info_ptr: *mut u8,
+    info_cap: usize
+) -> usize {
+    // Implementation would go here
+    0
+}
+
+/// Stream output handler (called when new output is available)
+#[no_mangle]
+pub extern "C" fn on_output(
+    output_type: u8, // 0 = stdout, 1 = stderr
+    data_ptr: *const u8,
+    data_len: usize
+) {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+}
+
+/// Main entry point for the CLI tool
+#[no_mangle]
+pub extern "C" fn main() -> i32 {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+    0
+}

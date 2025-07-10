@@ -1,0 +1,50 @@
+// HTTP Server Template for WASM-Sandbox
+// This template provides a basic HTTP server implementation
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HttpRequest {
+    pub method: String,
+    pub path: String,
+    pub headers: HashMap<String, String>,
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HttpResponse {
+    pub status: u16,
+    pub headers: HashMap<String, String>,
+    pub body: Option<String>,
+}
+
+// Main entry point for the HTTP server
+#[no_mangle]
+pub extern "C" fn handle_request(request_ptr: u32, request_len: u32) -> u32 {
+    // Implementation would parse the request and handle it
+    // Return response pointer
+    0
+}
+
+// Helper function to parse HTTP request
+pub fn parse_request(data: &[u8]) -> HttpRequest {
+    HttpRequest {
+        method: "GET".to_string(),
+        path: "/".to_string(),
+        headers: HashMap::new(),
+        body: None,
+    }
+}
+
+// Helper function to create HTTP response
+pub fn create_response(status: u16, body: Option<String>) -> HttpResponse {
+    let mut headers = HashMap::new();
+    headers.insert("Content-Type".to_string(), "application/json".to_string());
+    
+    HttpResponse {
+        status,
+        headers,
+        body,
+    }
+}

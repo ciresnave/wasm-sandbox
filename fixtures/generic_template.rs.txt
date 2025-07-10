@@ -1,0 +1,112 @@
+//! Generic WASM module template for WASM-Sandbox
+//!
+//! This template provides a basic structure for any WASM module
+//! that can be executed in the sandbox environment.
+
+use serde::{Deserialize, Serialize};
+
+/// Generic module configuration
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModuleConfig {
+    /// Module name
+    pub name: String,
+    /// Module version
+    pub version: String,
+    /// Configuration parameters
+    pub params: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// Generic result structure
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModuleResult {
+    /// Success flag
+    pub success: bool,
+    /// Result data
+    pub data: serde_json::Value,
+    /// Error message (if any)
+    pub error: Option<String>,
+    /// Execution metadata
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// Initialize the module
+#[no_mangle]
+pub extern "C" fn initialize(config_json: *const u8, config_len: usize) -> bool {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+    true
+}
+
+/// Execute the main function
+#[no_mangle]
+pub extern "C" fn execute(
+    input_json: *const u8,
+    input_len: usize,
+    output_ptr: *mut u8,
+    output_cap: usize
+) -> usize {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+    0
+}
+
+/// Process data
+#[no_mangle]
+pub extern "C" fn process(
+    data_ptr: *const u8,
+    data_len: usize,
+    result_ptr: *mut u8,
+    result_cap: usize
+) -> usize {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+    0
+}
+
+/// Get module status
+#[no_mangle]
+pub extern "C" fn get_status(
+    status_ptr: *mut u8,
+    status_cap: usize
+) -> usize {
+    // Implementation would go here
+    0
+}
+
+/// Reset module state
+#[no_mangle]
+pub extern "C" fn reset() -> bool {
+    // Implementation would go here
+    true
+}
+
+/// Cleanup and shutdown
+#[no_mangle]
+pub extern "C" fn cleanup() {
+    // Implementation would go here
+}
+
+/// Get module information
+#[no_mangle]
+pub extern "C" fn get_info(
+    info_ptr: *mut u8,
+    info_cap: usize
+) -> usize {
+    // Implementation would go here
+    0
+}
+
+/// Handle custom function calls
+#[no_mangle]
+pub extern "C" fn call_function(
+    function_name: *const u8,
+    function_name_len: usize,
+    args_json: *const u8,
+    args_len: usize,
+    result_ptr: *mut u8,
+    result_cap: usize
+) -> usize {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+    0
+}

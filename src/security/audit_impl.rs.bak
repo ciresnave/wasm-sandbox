@@ -1,0 +1,285 @@
+//! Security audit implementation
+
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
+use std::fmt;
+
+use serde::{Serialize, Deserialize};
+use tracing::{info, warn, error};
+
+use crate::security::audit::{
+    AuditEvent, AuditEventType, AuditSeverity, 
+    AuditLogger, AuditConfig
+};
+
+/// Implementation of SecurityAuditor with configurable event storage
+pub struct SecurityAuditorImpl {
+    /// Configuration
+    config: AuditConfig,
+    
+    /// Event history
+    events: Mutex<VecDeque<AuditEvent>>,
+    
+    /// Filter configuration
+    filter: Mutex<AuditFilter>,
+    
+    /// Is auditing enabled
+    enabled: Mutex<bool>,
+}
+
+impl SecurityAuditorImpl {
+    /// Create a new security auditor
+    pub fn new(config: AuditConfig) -> Self {
+        Self {
+            events: Mutex::new(VecDeque::with_capacity(config.history_size)),
+            filter: Mutex::new(AuditFilter::default()),
+            enabled: Mutex::new(true),
+            config,
+        }
+    }
+    
+    /// Ensure event history doesn't exceed capacity
+    fn ensure_capacity(&self) {
+        let mut events = self.events.lock().unwrap();
+        while events.len() >= self.config.history_size {
+            events.pop_front();
+        }
+    }
+    
+    /// Check if an event should be filtered out
+    fn should_filter(&self, event: &AuditEvent) -> bool {
+        let filter = self.filter.lock().unwrap();
+        
+        // Filter by severity
+        if filter.min_severity.as_ref().map_or(false, |min| *min > event.severity) {
+            return true;
+        }
+        
+        // Filter by instance
+        if let Some(instances) = &filter.instances {
+            if let Some(instance_id) = event.get_instance_id() {
+                if !instances.contains(&instance_id) {
+                    return true;
+                }
+            }
+        }
+        
+        // Filter by event type
+        if let Some(types) = &filter.event_types {
+            let type_name = std::any::type_name::<AuditEventType>()
+                .split("::")
+                .last()
+                .unwrap_or("Unknown");
+                
+            if !types.contains(&type_name.to_string()) {
+                return true;
+            }
+        }
+        
+        false
+    }
+    
+    /// Log an event with tracing
+    fn log_event(&self, event: &AuditEvent) {
+        // Format the event for logging
+        let event_str = format!("{}", event);
+        
+        // Log based on severity
+        match event.severity {
+            AuditSeverity::Info => info!("{}", event_str),
+            AuditSeverity::Warning => warn!("{}", event_str),
+            AuditSeverity::Error | AuditSeverity::Critical => error!("{}", event_str),
+        }
+    }
+}
+
+impl SecurityAuditor for SecurityAuditorImpl {
+    fn record_event(&self, event_type: AuditEventType, severity: AuditSeverity) {
+        // Skip if auditing is disabled
+        if !*self.enabled.lock().unwrap() {
+            return;
+        }
+        
+        // Create the event
+        let event = AuditEvent {
+            timestamp: SystemTime::now(),
+            event_type,
+            severity,
+        };
+        
+        // Filter the event
+        if self.should_filter(&event) {
+            return;
+        }
+        
+        // Log the event if logging is enabled
+        if self.config.log_events {
+            self.log_event(&event);
+        }
+        
+        // Ensure we have enough capacity
+        self.ensure_capacity();
+        
+        // Store the event
+        self.events.lock().unwrap().push_back(event);
+    }
+    
+    fn get_events(&self, count: Option<usize>) -> Vec<AuditEvent> {
+        let events = self.events.lock().unwrap();
+        let count = count.unwrap_or(events.len());
+        
+        events
+            .iter()
+            .rev()
+            .take(count)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect()
+    }
+    
+    fn get_events_since(&self, since: SystemTime) -> Vec<AuditEvent> {
+        let events = self.events.lock().unwrap();
+        
+        events
+            .iter()
+            .filter(|e| e.timestamp >= since)
+            .cloned()
+            .collect()
+    }
+    
+    fn filter_events(&self, filter: AuditFilter) {
+        *self.filter.lock().unwrap() = filter;
+    }
+    
+    fn clear_events(&self) {
+        self.events.lock().unwrap().clear();
+    }
+    
+    fn enable(&self) {
+        *self.enabled.lock().unwrap() = true;
+    }
+    
+    fn disable(&self) {
+        *self.enabled.lock().unwrap() = false;
+    }
+    
+    fn is_enabled(&self) -> bool {
+        *self.enabled.lock().unwrap()
+    }
+    
+    fn get_config(&self) -> AuditConfig {
+        self.config.clone()
+    }
+    
+    fn set_config(&self, config: AuditConfig) {
+        // Update event buffer size if needed
+        let mut events = self.events.lock().unwrap();
+        if config.history_size != self.config.history_size {
+            let mut new_events = VecDeque::with_capacity(config.history_size);
+            
+            // Keep the most recent events
+            let to_keep = config.history_size.min(events.len());
+            let start = events.len().saturating_sub(to_keep);
+            
+            for i in start..events.len() {
+                if let Some(event) = events.get(i) {
+                    new_events.push_back(event.clone());
+                }
+            }
+            
+            *events = new_events;
+        }
+        
+        // Update the config
+        (*(self.config as *const AuditConfig as *mut AuditConfig)) = config;
+    }
+}
+
+impl fmt::Display for AuditEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Get a readable timestamp
+        let timestamp = match SystemTime::now().duration_since(self.timestamp) {
+            Ok(duration) => {
+                if duration.as_secs() < 60 {
+                    format!("{} seconds ago", duration.as_secs())
+                } else if duration.as_secs() < 3600 {
+                    format!("{} minutes ago", duration.as_secs() / 60)
+                } else {
+                    format!("{} hours ago", duration.as_secs() / 3600)
+                }
+            }
+            Err(_) => "in the future".to_string(),
+        };
+        
+        // Format the severity
+        let severity = match self.severity {
+            AuditSeverity::Info => "INFO",
+            AuditSeverity::Warning => "WARNING",
+            AuditSeverity::Error => "ERROR",
+            AuditSeverity::Critical => "CRITICAL",
+        };
+        
+        // Format the event type
+        let event_description = match &self.event_type {
+            AuditEventType::ModuleLoaded { id, size } => 
+                format!("Module loaded: {} (size: {})", id, size),
+                
+            AuditEventType::InstanceCreated { id } =>
+                format!("Instance created: {}", id),
+                
+            AuditEventType::InstanceTerminated { id, exit_code } => {
+                let code_str = match exit_code {
+                    Some(code) => format!("with exit code {}", code),
+                    None => "with no exit code".to_string(),
+                };
+                format!("Instance terminated: {} {}", id, code_str)
+            }
+                
+            AuditEventType::FunctionCall { instance_id, function_name } =>
+                format!("Function called: {}::{}", instance_id, function_name),
+                
+            AuditEventType::ResourceLimit { instance_id, resource, limit_type, limit, attempted } =>
+                format!(
+                    "Resource limit reached: {} tried to use {} {} of {} (limit: {})", 
+                    instance_id, attempted, limit_type, resource, limit
+                ),
+                
+            AuditEventType::CapabilityViolation { instance_id, domain, operation } =>
+                format!(
+                    "Capability violation: {} attempted unauthorized operation: {} on {}", 
+                    instance_id, operation, domain
+                ),
+                
+            AuditEventType::HostFunctionCall { instance_id, function_name } =>
+                format!("Host function called: {}::{}", instance_id, function_name),
+                
+            AuditEventType::MemoryAccess { instance_id, access_type, address, size } =>
+                format!(
+                    "Memory access: {} {} at 0x{:x} (size: {})", 
+                    instance_id, access_type, address, size
+                ),
+                
+            AuditEventType::NetworkAccess { instance_id, direction, host, port, bytes } =>
+                format!(
+                    "Network access: {} {} {}:{} ({} bytes)", 
+                    instance_id, direction, host, port, bytes
+                ),
+                
+            AuditEventType::FileAccess { instance_id, operation, path, result } => {
+                let result_str = if *result { "succeeded" } else { "failed" };
+                format!(
+                    "File access: {} {} {} ({})", 
+                    instance_id, operation, path.display(), result_str
+                )
+            }
+                
+            AuditEventType::Custom { instance_id, event_name, details } =>
+                format!("Custom event: {} {} - {}", instance_id, event_name, details),
+        };
+        
+        write!(f, "[{}] [{}] {}", severity, timestamp, event_description)
+    }
+}

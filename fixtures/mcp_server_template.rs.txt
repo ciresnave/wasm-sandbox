@@ -1,0 +1,154 @@
+//! Model Context Protocol (MCP) Server template for WASM-Sandbox
+//!
+//! This template generates a WASM module that provides an MCP server interface
+//! for running language model tools in a sandboxed environment.
+
+use serde::{Deserialize, Serialize};
+
+/// MCP message types
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "type")]
+pub enum McpMessage {
+    Initialize { params: InitializeParams },
+    ListTools { params: ListToolsParams },
+    CallTool { params: CallToolParams },
+    Notification { method: String, params: serde_json::Value },
+}
+
+/// Initialize parameters
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InitializeParams {
+    pub client_info: ClientInfo,
+    pub capabilities: ClientCapabilities,
+}
+
+/// Client information
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClientInfo {
+    pub name: String,
+    pub version: String,
+}
+
+/// Client capabilities
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClientCapabilities {
+    pub tools: Option<ToolsCapability>,
+    pub prompts: Option<PromptsCapability>,
+    pub resources: Option<ResourcesCapability>,
+}
+
+/// Tools capability
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ToolsCapability {
+    pub list_changed: Option<bool>,
+}
+
+/// Prompts capability
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PromptsCapability {
+    pub list_changed: Option<bool>,
+}
+
+/// Resources capability
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ResourcesCapability {
+    pub subscribe: Option<bool>,
+    pub list_changed: Option<bool>,
+}
+
+/// List tools parameters
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ListToolsParams {
+    pub cursor: Option<String>,
+}
+
+/// Call tool parameters
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CallToolParams {
+    pub name: String,
+    pub arguments: serde_json::Value,
+}
+
+/// Tool definition
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Tool {
+    pub name: String,
+    pub description: String,
+    pub input_schema: serde_json::Value,
+}
+
+/// Tool result
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ToolResult {
+    pub content: Vec<ToolContent>,
+    pub is_error: Option<bool>,
+}
+
+/// Tool content
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "type")]
+pub enum ToolContent {
+    Text { text: String },
+    Image { data: String, mime_type: String },
+    Resource { resource: String },
+}
+
+/// Initialize the MCP server
+#[no_mangle]
+pub extern "C" fn initialize(params_json: *const u8, params_len: usize) -> bool {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+    true
+}
+
+/// List available tools
+#[no_mangle]
+pub extern "C" fn list_tools(
+    params_json: *const u8,
+    params_len: usize,
+    tools_ptr: *mut u8,
+    tools_cap: usize
+) -> usize {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+    0
+}
+
+/// Call a specific tool
+#[no_mangle]
+pub extern "C" fn call_tool(
+    params_json: *const u8,
+    params_len: usize,
+    result_ptr: *mut u8,
+    result_cap: usize
+) -> usize {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+    0
+}
+
+/// Process an MCP message
+#[no_mangle]
+pub extern "C" fn process_message(
+    message_json: *const u8,
+    message_len: usize,
+    response_ptr: *mut u8,
+    response_cap: usize
+) -> usize {
+    // Implementation would go here
+    // This is a template - actual implementation depends on the target application
+    0
+}
+
+/// Shutdown the MCP server
+#[no_mangle]
+pub extern "C" fn shutdown() {
+    // Implementation would go here
+}
+
+/// Check if the server is running
+#[no_mangle]
+pub extern "C" fn is_running() -> bool {
+    // Implementation would go here
+    false
+}

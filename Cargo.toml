@@ -51,7 +51,7 @@ tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
 # Security
-cap-std = "2.0.0"
+cap-std = "3.4.1"
 wasi-cap-std-sync = "13.0.0"
 
 # Utilities

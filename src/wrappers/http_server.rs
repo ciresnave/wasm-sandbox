@@ -248,8 +248,8 @@ impl HttpServerGenerator {
     /// Generate HTTP server wrapper code
     fn generate_code(&self, config: &HttpServerConfig, spec: &WrapperSpec) -> Result<String> {
         let address = format!("{}:{}", config.address, config.port);
-        let threads = config.threads.unwrap_or(4);
-        let timeout = config.timeout_seconds.unwrap_or(30);
+        let _threads = config.threads.unwrap_or(4);
+        let _timeout = config.timeout_seconds.unwrap_or(30);
         
         // Generate the server code
         let mut code = format!(
@@ -416,7 +416,7 @@ async fn shutdown_signal() {{
         );
         
         // Add TLS configuration if enabled
-        if let Some(tls_config) = &config.cors {
+        if let Some(_tls_config) = &config.cors {
             // Add TLS imports and config
             code = code.replace(
                 "use hyper::",
@@ -458,19 +458,19 @@ use hyper::"#
         
         // Add CORS configuration if enabled
         if let Some(cors_config) = &config.cors {
-            let allowed_origins = cors_config.allowed_origins
+            let _allowed_origins = cors_config.allowed_origins
                 .iter()
                 .map(|o| format!("\"{}\"", o))
                 .collect::<Vec<_>>()
                 .join(", ");
                 
-            let allowed_methods = cors_config.allowed_methods
+            let _allowed_methods = cors_config.allowed_methods
                 .iter()
                 .map(|m| format!("\"{}\"", m))
                 .collect::<Vec<_>>()
                 .join(", ");
                 
-            let allowed_headers = cors_config.allowed_headers
+            let _allowed_headers = cors_config.allowed_headers
                 .iter()
                 .map(|h| format!("\"{}\"", h))
                 .collect::<Vec<_>>()

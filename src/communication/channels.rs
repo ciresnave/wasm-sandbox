@@ -125,12 +125,15 @@ pub struct GuestChannelInterface {
     name: String,
     
     /// Messages from host to guest
+    #[allow(dead_code)]
     host_to_guest: VecDeque<Vec<u8>>,
     
     /// Messages from guest to host
+    #[allow(dead_code)]
     guest_to_host: VecDeque<Vec<u8>>,
     
     /// Channel capacity
+    #[allow(dead_code)]
     capacity: usize,
     
     /// Is closed
@@ -139,7 +142,7 @@ pub struct GuestChannelInterface {
 
 impl GuestChannelInterface {
     /// Send a message to the host
-    pub fn send(&self, message: &[u8]) -> Result<()> {
+    pub fn send(&self, _message: &[u8]) -> Result<()> {
         // Check if closed
         if self.closed {
             return Err(Error::Communication("Channel is closed".to_string()));

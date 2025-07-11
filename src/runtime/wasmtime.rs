@@ -112,6 +112,7 @@ pub struct WasmtimeInstance {
     instance: Instance,
     
     /// Module ID
+    #[allow(dead_code)]
     module_id: ModuleId,
 }
 

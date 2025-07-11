@@ -2,7 +2,7 @@
 
 use std::path::Path;
 use wasm_sandbox::{
-    WasmSandbox, SandboxConfig, InstanceConfig, 
+    WasmSandbox, InstanceConfig, 
     security::{
         Capabilities, NetworkCapability, FilesystemCapability, 
         EnvironmentCapability, ProcessCapability, ResourceLimits

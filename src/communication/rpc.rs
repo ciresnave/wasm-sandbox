@@ -10,12 +10,14 @@ use crate::communication::{RpcChannel, CommunicationChannel};
 /// JSON-RPC implementation
 pub struct JsonRpcChannel {
     /// Communication channel
+    #[allow(dead_code)]
     channel: Arc<dyn CommunicationChannel>,
     
     /// Host functions
     host_functions: Mutex<HashMap<String, Box<dyn Fn(&str) -> Result<String> + Send + Sync>>>,
     
     /// Function call ID counter
+    #[allow(dead_code)]
     call_id: Mutex<u64>,
 }
 
@@ -30,6 +32,7 @@ impl JsonRpcChannel {
     }
     
     /// Get the next call ID
+    #[allow(dead_code)]
     fn next_call_id(&self) -> u64 {
         let mut id = self.call_id.lock().unwrap();
         *id += 1;
@@ -37,12 +40,14 @@ impl JsonRpcChannel {
     }
     
     /// Serialize a value to JSON
+    #[allow(dead_code)]
     fn serialize<T: Serialize>(&self, value: &T) -> Result<String> {
         serde_json::to_string(value)
             .map_err(|e| Error::Json(e))
     }
     
     /// Deserialize a value from JSON
+    #[allow(dead_code)]
     fn deserialize<T: DeserializeOwned>(&self, data: &str) -> Result<T> {
         serde_json::from_str(data)
             .map_err(|e| Error::Json(e))
@@ -92,7 +97,7 @@ impl RpcChannel for JsonRpcChannel {
         params_json: &str,
     ) -> Result<String> {
         // Create JSON-RPC request
-        let request = RpcRequest {
+        let _request = RpcRequest {
             id: 1,
             method: function_name.to_string(),
             params: serde_json::from_str(params_json).map_err(|e| Error::Json(e))?,

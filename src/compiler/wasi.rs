@@ -91,7 +91,7 @@ impl<C: Compiler> WasiCompiler<C> {
     }
     
     /// Generate a WASI-specific wrapper file for the WASM module
-    fn generate_wasi_wrapper(&self, wasm_path: &Path, options: &CompilerOptions) -> Result<PathBuf> {
+    fn generate_wasi_wrapper(&self, wasm_path: &Path, _options: &CompilerOptions) -> Result<PathBuf> {
         // Create a wrapper directory next to the WASM file
         let parent = wasm_path.parent().ok_or_else(|| {
             Error::FileSystem("Invalid WASM path, no parent directory".to_string())

@@ -101,8 +101,8 @@ jsonschema = "0.17.0"
 impl McpServerGenerator {
     /// Generate MCP server wrapper code
     fn generate_code(&self, spec: &WrapperSpec, port: u16, schema_path: Option<&PathBuf>) -> Result<String> {
-        let app_path = spec.app_path.to_string_lossy();
-        let args = spec.arguments.join(", ");
+        let _app_path = spec.app_path.to_string_lossy();
+        let _args = spec.arguments.join(", ");
         
         // Format environment variables
         let env_vars = spec.environment.iter()

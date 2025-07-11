@@ -477,7 +477,7 @@ impl TimeVerifier {
 }
 
 impl CapabilityVerifier for TimeVerifier {
-    fn verify(&self, operation: &str, params: &[&str]) -> Result<()> {
+    fn verify(&self, operation: &str, _params: &[&str]) -> Result<()> {
         match operation {
             "get" => {
                 // Reading time is always allowed
@@ -519,7 +519,7 @@ impl RandomVerifier {
 }
 
 impl CapabilityVerifier for RandomVerifier {
-    fn verify(&self, operation: &str, params: &[&str]) -> Result<()> {
+    fn verify(&self, operation: &str, _params: &[&str]) -> Result<()> {
         match operation {
             "pseudo" => {
                 if !self.can_pseudo_random() {

@@ -192,6 +192,7 @@ pub trait WasmFunctionCaller: Send + Sync {
 }
 
 /// Extension trait for async function calling (not dyn-compatible)
+#[allow(async_fn_in_trait)]
 pub trait WasmFunctionCallerAsync {
     /// Call a function in the instance with JSON serialization (async version)
     async fn call_function_json_async(
@@ -209,6 +210,7 @@ pub trait WasmFunctionCallerAsync {
 }
 
 /// Extension trait for type-safe function calling (generic, not dyn-compatible)
+#[allow(async_fn_in_trait)]
 pub trait WasmFunctionCallerExt {
     /// Call a function with compile-time type safety
     async fn call_function<P, R>(
@@ -217,20 +219,20 @@ pub trait WasmFunctionCallerExt {
         params: &P,
     ) -> Result<R>
     where
-        P: serde::Serialize + ?Sized,
-        R: for<'de> serde::Deserialize<'de>;
+        P: serde::Serialize + Send + Sync,
+        R: for<'de> serde::Deserialize<'de> + Send;
 }
 
 /// Automatic implementation for all function callers
-impl<T: WasmFunctionCaller> WasmFunctionCallerExt for T {
+impl<T: WasmFunctionCaller + Send + Sync> WasmFunctionCallerExt for T {
     async fn call_function<P, R>(
         &self,
         function_name: &str,
         params: &P,
     ) -> Result<R>
     where
-        P: serde::Serialize + ?Sized,
-        R: for<'de> serde::Deserialize<'de>,
+        P: serde::Serialize + Send + Sync,
+        R: for<'de> serde::Deserialize<'de> + Send,
     {
         let params_json = serde_json::to_string(params)?;
         let result_json = self.call_function_json(function_name, &params_json)?;

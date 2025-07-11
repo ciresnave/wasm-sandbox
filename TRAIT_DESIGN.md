@@ -1,4 +1,9 @@
-# WASM Sandbox - New Trait Design Documentation
+# WASM Sandb**Key Characteristics:**
+
+- No generic methods with non-concrete types
+- No associated types beyond basic ones  
+- No async functions in the core trait (async is available in extension traits)
+- All methods return concrete types or basic generic boundsew Trait Design Documentation
 
 ## Overview
 
@@ -11,6 +16,7 @@ This document describes the new trait design patterns implemented in the wasm-sa
 The core traits (`WasmInstance`, `WasmModule`, `WasmRuntime`, `RpcChannel`) are designed to be dyn-compatible, meaning they can be used as trait objects (`dyn WasmInstance`, `dyn WasmRuntime`, etc.).
 
 **Key Characteristics:**
+
 - No generic methods with non-concrete types
 - No associated types beyond basic ones
 - No async functions in the core trait
@@ -21,6 +27,7 @@ The core traits (`WasmInstance`, `WasmModule`, `WasmRuntime`, `RpcChannel`) are 
 Advanced functionality that requires generics or async operations is provided through extension traits that extend the core dyn-compatible traits.
 
 **Extension Trait Patterns:**
+
 - `WasmInstanceExt` for generic/async operations on instances
 - `WasmRuntimeExt` for advanced runtime operations
 - `RpcChannelExt` for type-safe communication
@@ -34,6 +41,7 @@ All trait objects support downcasting to concrete implementations through the `a
 ### Core Traits (Dyn-Compatible)
 
 #### `WasmInstance`
+
 ```rust
 pub trait WasmInstance: Send + Sync {
     // Basic state and resource management
@@ -59,6 +67,7 @@ pub trait WasmInstance: Send + Sync {
 ```
 
 #### `WasmRuntime`
+
 ```rust
 pub trait WasmRuntime: Send + Sync {
     // Module management
@@ -84,7 +93,10 @@ pub trait WasmRuntime: Send + Sync {
 
 ### Extension Traits (Generic/Async)
 
+Extension traits provide advanced functionality including async operations and generic methods. These traits use `#[allow(async_fn_in_trait)]` to suppress compiler warnings about async functions in traits, as this is an intentional design choice for extension traits within the crate.
+
 #### `WasmInstanceExt`
+
 ```rust
 pub trait WasmInstanceExt: WasmInstance {
     // Generic function calling
@@ -113,6 +125,7 @@ pub trait WasmInstanceExt: WasmInstance {
 ```
 
 #### `WasmRuntimeExt`
+
 ```rust
 pub trait WasmRuntimeExt: WasmRuntime {
     // Advanced module loading
@@ -128,6 +141,7 @@ pub trait WasmRuntimeExt: WasmRuntime {
 ### Communication Traits
 
 #### `RpcChannel` (Dyn-Compatible)
+
 ```rust
 pub trait RpcChannel: Send + Sync {
     // Basic message passing
@@ -144,6 +158,7 @@ pub trait RpcChannel: Send + Sync {
 ```
 
 #### `RpcChannelExt` (Generic)
+
 ```rust
 pub trait RpcChannelExt: RpcChannel {
     // Type-safe communication
@@ -228,6 +243,7 @@ async fn send_request<T: RpcChannelExt>(channel: &T, data: &MyData) -> Result<My
 ### For Runtime Implementers
 
 1. **Implement the Core Trait First**
+
    ```rust
    impl WasmRuntime for MyRuntime {
        fn load_module(&self, wasm_bytes: &[u8]) -> Result<Box<dyn WasmModule>> {
@@ -241,6 +257,7 @@ async fn send_request<T: RpcChannelExt>(channel: &T, data: &MyData) -> Result<My
    ```
 
 2. **Add Extension Trait Implementation**
+
    ```rust
    impl WasmRuntimeExt for MyRuntime {
        async fn load_module_async(&self, wasm_bytes: &[u8]) -> Result<Box<dyn WasmModule>> {
@@ -250,6 +267,7 @@ async fn send_request<T: RpcChannelExt>(channel: &T, data: &MyData) -> Result<My
    ```
 
 3. **Provide Blanket Implementation for Trait Objects**
+
    ```rust
    impl<T: WasmRuntime + ?Sized> WasmRuntimeExt for T {
        // Default implementations that delegate to sync methods
@@ -273,24 +291,29 @@ async fn send_request<T: RpcChannelExt>(channel: &T, data: &MyData) -> Result<My
 ## Benefits of This Design
 
 ### 1. **Flexibility**
+
 - Can use any runtime implementation through trait objects
 - Easy to switch between Wasmtime, Wasmer, or custom runtimes
 - Plugin-style architecture support
 
 ### 2. **Type Safety**
+
 - Extension traits provide full type safety for generic operations
 - Compile-time guarantees for serialization/deserialization
 
 ### 3. **Performance**
+
 - Zero-cost abstractions for direct usage
 - Minimal overhead for trait object usage
 - Async operations properly supported
 
 ### 4. **Backward Compatibility**
+
 - Existing code using concrete types continues to work
 - Gradual migration path to trait objects
 
 ### 5. **Extensibility**
+
 - Easy to add new extension traits
 - Custom runtime implementations can provide additional features
 - Future-proof design
@@ -300,12 +323,14 @@ async fn send_request<T: RpcChannelExt>(channel: &T, data: &MyData) -> Result<My
 ### From Concrete Types to Trait Objects
 
 **Before:**
+
 ```rust
 let runtime = WasmtimeRuntime::new(&config)?;
 let instance = runtime.create_instance(/* ... */)?;
 ```
 
 **After:**
+
 ```rust
 let runtime: Box<dyn WasmRuntime> = Box::new(WasmtimeRuntime::new(&config)?);
 let instance = runtime.create_instance(/* ... */)?;
@@ -314,11 +339,13 @@ let instance = runtime.create_instance(/* ... */)?;
 ### From Generic Methods to Extension Traits
 
 **Before:**
+
 ```rust
 let result: T = instance.call_function(name, params)?; // Not dyn-compatible
 ```
 
 **After:**
+
 ```rust
 use wasm_sandbox::runtime::WasmInstanceExt;
 let result: T = instance.call_function(name, params).await?; // Works with trait objects
@@ -337,6 +364,7 @@ The trait structure is comprehensively tested in `tests/trait_structure_test.rs`
 ## Conclusion
 
 This trait design provides a robust foundation for the wasm-sandbox crate that balances:
+
 - **Usability**: Simple APIs for common use cases
 - **Flexibility**: Support for advanced scenarios through extension traits
 - **Performance**: Minimal overhead and zero-cost abstractions

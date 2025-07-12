@@ -6,11 +6,14 @@ We welcome contributions to the `wasm-sandbox` project! This document provides g
 
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/wasm-sandbox.git
    cd wasm-sandbox
    ```
+
 3. **Create a feature branch**:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```

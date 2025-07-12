@@ -1,10 +1,41 @@
-# WebAssembly Sandbox (`wasm-sandbox`)
+# wasm-sandbox
 
 [![Crates.io](https://img.shields.io/crates/v/wasm-sandbox)](https://crates.io/crates/wasm-sandbox)
 [![Documentation](https://docs.rs/wasm-sandbox/badge.svg)](https://docs.rs/wasm-sandbox)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A secure WebAssembly sandbox for running untrusted code with flexible host-guest communication, comprehensive resource limits, and capability-based security.
+A secure WebAssembly sandbox for running untrusted code with **dead-simple ease of use**, flexible host-guest communication, comprehensive resource limits, and capability-based security.
+
+## ✨ NEW in v0.3.0: Ease-of-Use Revolution
+
+We've completely reimagined the developer experience with **progressive complexity APIs**:
+
+### 🚀 One-Line Execution (Dead Simple)
+```rust
+// Auto-compile and run in one line!
+let result: i32 = wasm_sandbox::run("calculator.rs", "add", &(5, 3)).await?;
+```
+
+### ⏱️ With Timeout (Simple + Safe)
+```rust
+let result: String = wasm_sandbox::run_with_timeout(
+    "processor.py", "process", &"data", Duration::from_secs(30)
+).await?;
+```
+
+### 🎛️ Builder Pattern (More Control)
+```rust
+let sandbox = WasmSandbox::builder()
+    .source("my_program.rs")
+    .timeout_duration(Duration::from_secs(60))
+    .memory_limit(64 * 1024 * 1024)
+    .enable_file_access(false)
+    .build().await?;
+```
+
+## Quick Links
+
+📖 **[Complete Documentation](docs/README.md)** | 🚀 **[API Reference](https://docs.rs/wasm-sandbox)** | 🔧 **[Examples](examples/README.md)** | 💬 **[Discussions](https://github.com/ciresnave/wasm-sandbox/discussions)**
 
 ## Key Features
 
@@ -18,7 +49,20 @@ A secure WebAssembly sandbox for running untrusted code with flexible host-guest
 
 ## Usage Examples
 
-### Basic Sandbox Usage
+### Ultra-Simple Usage (Coming in v0.3.0)
+
+```rust
+// One line: auto-compile and run
+let result: i32 = wasm_sandbox::run("./calculator.rs", "add", &(5, 3))?;
+
+// Auto-compile project and reuse
+let sandbox = WasmSandbox::from_source("./my_project/")?;
+let result = sandbox.call("process_data", &input)?;
+```
+
+### Current API (v0.2.0)
+
+#### Basic Sandbox Usage
 
 ```rust
 use wasm_sandbox::{WasmSandbox, SandboxConfig};
@@ -111,7 +155,7 @@ The crate features a **trait-based architecture** with two main patterns:
 - **Dyn-Compatible Core Traits**: `WasmRuntime`, `WasmInstance`, `WasmModule` - can be used as trait objects
 - **Extension Traits**: `WasmRuntimeExt`, `WasmInstanceExt` - provide async and generic operations
 
-This design allows for maximum flexibility while maintaining type safety. See [`TRAIT_DESIGN.md`](TRAIT_DESIGN.md) for detailed information.
+This design allows for maximum flexibility while maintaining type safety. See [`docs/design/TRAIT_DESIGN.md`](docs/design/TRAIT_DESIGN.md) for detailed information.
 
 ## Quick Start
 
@@ -220,11 +264,45 @@ cargo run --example http_server
 
 ## Examples
 
-The repository includes several examples:
+The repository includes several examples demonstrating different use cases:
 
-- **HTTP Server**: `cargo run --example http_server`
-- **MCP Server**: `cargo run --example mcp_server`
-- **CLI Tool**: `cargo run --example cli_wrapper`
+- **[Basic Usage](examples/basic_usage.rs)** - Simple function calling and sandbox setup
+- **[File Processor](examples/file_processor.rs)** - Secure file processing with filesystem limits
+- **[HTTP Server](examples/http_server.rs)** - Web server running in sandbox with network controls
+- **[MCP Server](examples/mcp_server.rs)** - Model Context Protocol server implementation
+- **[CLI Tool](examples/cli_wrapper.rs)** - Command-line tool wrapper with I/O redirection
+- **[Plugin Ecosystem](examples/plugin_ecosystem.rs)** - Generic plugin system with hot reload
+
+**Run examples:**
+```bash
+cargo run --example basic_usage
+cargo run --example http_server
+cargo run --example file_processor
+```
+
+See [`examples/README.md`](examples/README.md) for detailed descriptions and usage instructions.
+
+## Documentation
+
+### For New Users
+- **[Quick Start](#quick-start)** - Get up and running in minutes
+- **[Installation Guide](docs/guides/MIGRATION.md)** - Detailed installation and setup
+- **[Basic Tutorial](docs/guides/basic-tutorial.md)** - Step-by-step first application *(planned)*
+- **[Examples](examples/README.md)** - Working code examples
+
+### API Reference
+- **[docs.rs](https://docs.rs/wasm-sandbox)** - Complete API documentation (always up-to-date)
+- **[API Overview](docs/api/API.md)** - Core concepts and usage patterns
+- **[Planned Improvements](docs/api/API_IMPROVEMENTS.md)** - Upcoming API changes
+
+### Advanced Topics
+- **[Trait Design](docs/design/TRAIT_DESIGN.md)** - Architecture and trait patterns
+- **[Generic Plugin System](docs/design/GENERIC_PLUGIN_DESIGN.md)** - Plugin development framework
+- **[Migration Guide](docs/guides/MIGRATION.md)** - Upgrading between versions
+- **[Security Configuration](docs/guides/security-config.md)** - Capability and resource management *(planned)*
+
+### Complete Documentation Index
+**[📖 Browse All Documentation](docs/README.md)** - Organized by category with detailed navigation
 
 ## Architecture
 
@@ -249,7 +327,14 @@ Run `cargo bench` to see detailed performance metrics.
 
 ## Contributing
 
-Contributions are welcome! Please see our [contributing guidelines](CONTRIBUTING.md) for details.
+We welcome contributions! Please see:
+
+- **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute to the project
+- **[Documentation Index](docs/README.md)** - Complete documentation for developers
+- **[API Improvements](docs/api/API_IMPROVEMENTS.md)** - Priority development areas
+- **[Design Documents](docs/design/)** - Architecture and design decisions
+
+For questions and discussions, use [GitHub Discussions](https://github.com/ciresnave/wasm-sandbox/discussions).
 
 ## License
 

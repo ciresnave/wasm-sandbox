@@ -1,9 +1,4 @@
-# WASM Sandb**Key Characteristics:**
-
-- No generic methods with non-concrete types
-- No associated types beyond basic ones  
-- No async functions in the core trait (async is available in extension traits)
-- All methods return concrete types or basic generic boundsew Trait Design Documentation
+# WASM Sandbox Trait Design Documentation
 
 ## Overview
 
@@ -17,7 +12,12 @@ The core traits (`WasmInstance`, `WasmModule`, `WasmRuntime`, `RpcChannel`) are 
 
 **Key Characteristics:**
 
+**Key Characteristics:**
+
 - No generic methods with non-concrete types
+- No associated types beyond basic ones  
+- No async functions in the core trait (async is available in extension traits)
+- All methods return concrete types or basic generic bounds
 - No associated types beyond basic ones
 - No async functions in the core trait
 - All methods return concrete types or basic generic bounds

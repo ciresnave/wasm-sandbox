@@ -204,6 +204,7 @@ wasm-sandbox = { version = "0.1.0", features = ["all-runtimes"] }
 ```
 
 Available features:
+
 - `wasmtime-runtime` (default): Enable Wasmtime runtime
 - `wasmer-runtime`: Enable Wasmer runtime
 - `all-runtimes`: Enable all available runtimes

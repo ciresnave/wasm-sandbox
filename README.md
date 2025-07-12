@@ -94,15 +94,24 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-wasm-sandbox = "0.1.0"
+wasm-sandbox = "0.2.0"
 ```
 
 For all features including Wasmer runtime support:
 
 ```toml
 [dependencies]
-wasm-sandbox = { version = "0.1.0", features = ["all-runtimes"] }
+wasm-sandbox = { version = "0.2.0", features = ["all-runtimes"] }
 ```
+
+## Architecture Overview
+
+The crate features a **trait-based architecture** with two main patterns:
+
+- **Dyn-Compatible Core Traits**: `WasmRuntime`, `WasmInstance`, `WasmModule` - can be used as trait objects
+- **Extension Traits**: `WasmRuntimeExt`, `WasmInstanceExt` - provide async and generic operations
+
+This design allows for maximum flexibility while maintaining type safety. See [`TRAIT_DESIGN.md`](TRAIT_DESIGN.md) for detailed information.
 
 ## Quick Start
 

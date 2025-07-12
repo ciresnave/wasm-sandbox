@@ -274,7 +274,7 @@ pub trait WasmRuntime: Send + Sync {
 pub fn create_runtime(config: &RuntimeConfig) -> Result<Box<dyn WasmRuntime>> {
     #[cfg(feature = "wasmtime-runtime")]
     {
-        return Ok(Box::new(crate::runtime::wasmtime::WasmtimeRuntime::new(config)?));
+        Ok(Box::new(crate::runtime::wasmtime::WasmtimeRuntime::new(config)?))
     }
 
     #[cfg(all(feature = "wasmer-runtime", not(feature = "wasmtime-runtime")))]

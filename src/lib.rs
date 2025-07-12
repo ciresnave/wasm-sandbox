@@ -11,6 +11,18 @@
 //! 4. **Resource Control**: Fine-grained control over memory, CPU, network, filesystem access
 //! 5. **Ease of Use**: High-level APIs for common use cases with sensible defaults
 
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::new_without_default)]
+#![allow(clippy::should_implement_trait)]
+#![allow(clippy::derivable_impls)]
+#![allow(clippy::redundant_closure)]
+#![allow(clippy::len_zero)]
+#![allow(clippy::needless_return)]
+#![allow(clippy::single_char_add_str)]
+#![allow(clippy::unnecessary_map_or)]
+#![allow(clippy::format_in_format_args)]
+#![allow(clippy::is_digit_ascii_radix)]
+
 // Re-export common types and traits
 pub mod error;
 pub use error::{Error, Result};

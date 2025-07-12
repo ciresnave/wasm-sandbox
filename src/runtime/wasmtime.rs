@@ -149,6 +149,12 @@ impl WasmtimeInstance {
 /// Function caller implementation for Wasmtime
 pub struct WasmtimeFunctionCaller;
 
+impl Default for WasmtimeFunctionCaller {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WasmtimeFunctionCaller {
     pub fn new() -> Self {
         Self

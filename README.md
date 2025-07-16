@@ -11,12 +11,14 @@ A secure WebAssembly sandbox for running untrusted code with **dead-simple ease 
 We've completely reimagined the developer experience with **progressive complexity APIs**:
 
 ### 🚀 One-Line Execution (Dead Simple)
+
 ```rust
 // Auto-compile and run in one line!
 let result: i32 = wasm_sandbox::run("calculator.rs", "add", &(5, 3)).await?;
 ```
 
 ### ⏱️ With Timeout (Simple + Safe)
+
 ```rust
 let result: String = wasm_sandbox::run_with_timeout(
     "processor.py", "process", &"data", Duration::from_secs(30)
@@ -24,6 +26,7 @@ let result: String = wasm_sandbox::run_with_timeout(
 ```
 
 ### 🎛️ Builder Pattern (More Control)
+
 ```rust
 let sandbox = WasmSandbox::builder()
     .source("my_program.rs")
@@ -46,6 +49,20 @@ let sandbox = WasmSandbox::builder()
 - **🌐 Application Wrappers**: Built-in support for HTTP servers, MCP servers, and CLI tools
 - **📊 Resource Control**: Memory, CPU, network, and filesystem limits with monitoring
 - **🔄 Async/Await**: Full async support for non-blocking operations
+
+## ✨ NEW Major Additions in v0.4.0
+
+### 🧩 WebAssembly Component Model
+
+Support for the next evolution of WebAssembly with interface-driven development, multi-language components, and type-safe interactions. [Learn more](docs/guides/COMPONENT_MODEL.md)
+
+### 🐍 Python Language Bindings
+
+Use wasm-sandbox from Python applications with a familiar API and seamless integration. [Learn more](docs/bindings/PYTHON_BINDINGS.md)
+
+### 📊 Streaming APIs for Large Data
+
+Process datasets larger than memory with efficient streaming APIs for real-time data handling. [Learn more](docs/guides/STREAMING_APIS.md)
 
 ## Usage Examples
 
@@ -274,6 +291,7 @@ The repository includes several examples demonstrating different use cases:
 - **[Plugin Ecosystem](examples/plugin_ecosystem.rs)** - Generic plugin system with hot reload
 
 **Run examples:**
+
 ```bash
 cargo run --example basic_usage
 cargo run --example http_server
@@ -285,23 +303,27 @@ See [`examples/README.md`](examples/README.md) for detailed descriptions and usa
 ## Documentation
 
 ### For New Users
+
 - **[Quick Start](#quick-start)** - Get up and running in minutes
 - **[Installation Guide](docs/guides/MIGRATION.md)** - Detailed installation and setup
 - **[Basic Tutorial](docs/guides/basic-tutorial.md)** - Step-by-step first application *(planned)*
 - **[Examples](examples/README.md)** - Working code examples
 
 ### API Reference
+
 - **[docs.rs](https://docs.rs/wasm-sandbox)** - Complete API documentation (always up-to-date)
 - **[API Overview](docs/api/API.md)** - Core concepts and usage patterns
 - **[Planned Improvements](docs/api/API_IMPROVEMENTS.md)** - Upcoming API changes
 
 ### Advanced Topics
+
 - **[Trait Design](docs/design/TRAIT_DESIGN.md)** - Architecture and trait patterns
 - **[Generic Plugin System](docs/design/GENERIC_PLUGIN_DESIGN.md)** - Plugin development framework
 - **[Migration Guide](docs/guides/MIGRATION.md)** - Upgrading between versions
 - **[Security Configuration](docs/guides/security-config.md)** - Capability and resource management *(planned)*
 
 ### Complete Documentation Index
+
 **[📖 Browse All Documentation](docs/README.md)** - Organized by category with detailed navigation
 
 ## Architecture

@@ -18,58 +18,62 @@ impl WrapperGenerator for GenericGenerator {
     fn compile_wrapper(&self, code: &str, output_path: &Path) -> Result<()> {
         // Create a temporary directory for building
         let temp_dir = tempfile::tempdir()
-            .map_err(|e| Error::WrapperGeneration(
-                format!("Failed to create temporary directory: {}", e)
-            ))?;
+            .map_err(|e| Error::WrapperGeneration { 
+                reason: format!("Failed to create temporary directory: {}", e),
+                wrapper_type: Some("generic".to_string()),
+            })?;
         
         // Write code to a temporary file
         let src_path = temp_dir.path().join("src/main.rs");
         std::fs::create_dir_all(src_path.parent().unwrap())
-            .map_err(|e| Error::WrapperGeneration(
-                format!("Failed to create source directory: {}", e)
-            ))?;
+            .map_err(|e| Error::WrapperGeneration { 
+                reason: format!("Failed to create source directory: {}", e),
+                wrapper_type: Some("generic".to_string()),
+            })?;
             
         std::fs::write(&src_path, code)
-            .map_err(|e| Error::WrapperGeneration(
-                format!("Failed to write source code: {}", e)
-            ))?;
+            .map_err(|e| Error::WrapperGeneration {
+                reason: format!("Failed to write source code: {}", e),
+                wrapper_type: Some("generic".to_string()),
+            })?;
             
         // Create Cargo.toml
-        let cargo_toml = format!(
-            r#"[package]
+        let cargo_toml = r#"[package]
 name = "generic-wrapper"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-wasm-sandbox = {{ path = "../.." }}
-serde = {{ version = "1.0", features = ["derive"] }}
+wasm-sandbox = { path = "../.." }
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = {{ version = "1.0", features = ["full"] }}
+tokio = { version = "1.0", features = ["full"] }
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
-"#
-        );
+"#.to_string();
         
         std::fs::write(temp_dir.path().join("Cargo.toml"), cargo_toml)
-            .map_err(|e| Error::WrapperGeneration(
-                format!("Failed to write Cargo.toml: {}", e)
-            ))?;
+            .map_err(|e| Error::WrapperGeneration {
+                reason: format!("Failed to write Cargo.toml: {}", e),
+                wrapper_type: Some("generic".to_string()),
+            })?;
             
         // Run cargo build
         let status = Command::new("cargo")
             .current_dir(temp_dir.path())
-            .args(&["build", "--target", "wasm32-wasi", "--release"])
+            .args(["build", "--target", "wasm32-wasi", "--release"])
             .status()
-            .map_err(|e| Error::WrapperGeneration(
-                format!("Failed to run cargo build: {}", e)
-            ))?;
+            .map_err(|e| Error::WrapperGeneration {
+                reason: format!("Failed to run cargo build: {}", e),
+                wrapper_type: Some("generic".to_string()),
+            })?;
             
         if !status.success() {
-            return Err(Error::WrapperGeneration(
-                "Cargo build failed".to_string()
-            ));
+            return Err(Error::WrapperGeneration {
+                reason: "Cargo build failed".to_string(),
+                wrapper_type: Some("generic".to_string()),
+            });
         }
         
         // Copy the output file
@@ -77,9 +81,10 @@ tracing-subscriber = "0.3"
             .join("target/wasm32-wasi/release/generic-wrapper.wasm");
             
         std::fs::copy(wasm_path, output_path)
-            .map_err(|e| Error::WrapperGeneration(
-                format!("Failed to copy output file: {}", e)
-            ))?;
+            .map_err(|e| Error::WrapperGeneration {
+                reason: format!("Failed to copy output file: {}", e),
+                wrapper_type: Some("generic".to_string()),
+            })?;
             
         Ok(())
     }

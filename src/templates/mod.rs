@@ -67,7 +67,7 @@ impl SimpleTemplateRenderer {
 impl TemplateRenderer for SimpleTemplateRenderer {
     fn render(&self, template_name: &str, variables: &HashMap<String, String>) -> Result<String> {
         let template = self.get_template(template_name)
-            .ok_or_else(|| Error::Generic(format!("Template not found: {}", template_name)))?;
+            .ok_or_else(|| Error::Generic { message: format!("Template not found: {}", template_name) })?;
         
         Ok(self.render_simple(template, variables))
     }

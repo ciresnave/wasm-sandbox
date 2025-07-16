@@ -6,6 +6,7 @@ use tempfile::TempDir;
 use std::fs;
 
 /// Create a simple Rust calculator for testing
+#[allow(dead_code)]
 fn create_test_calculator(dir: &TempDir) -> std::path::PathBuf {
     let calc_path = dir.path().join("calculator.rs");
     let calc_code = r#"
@@ -157,7 +158,7 @@ async fn test_error_handling_invalid_source() {
         error_msg.contains("Source file not found") ||
         error_msg.contains("Failed to read") ||
         error_msg.contains("system cannot find"),
-        "Unexpected error message: {}", error_msg
+        "Unexpected error message: {error_msg}"
     );
 }
 
@@ -287,7 +288,7 @@ async fn test_concurrent_execution() -> Result<()> {
     
     let results: Result<Vec<_>> = futures::future::try_join_all(handles)
         .await
-        .map_err(|e| wasm_sandbox::Error::Generic(format!("Join error: {}", e)))?
+        .map_err(|e| wasm_sandbox::Error::Generic { message: format!("Join error: {e}") })?
         .into_iter()
         .collect();
     

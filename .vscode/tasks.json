@@ -60,19 +60,6 @@
             ]
         },
         {
-            "label": "Check Code",
-            "type": "shell",
-            "command": "cargo check",
-            "group": "build",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
-            "problemMatcher": [
-                "$rustc"
-            ]
-        },
-        {
             "label": "Clippy",
             "type": "shell",
             "command": "cargo clippy",

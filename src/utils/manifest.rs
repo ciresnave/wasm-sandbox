@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::fs;
 
 use serde::{Deserialize, Serialize};
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, SandboxError};
 use crate::security::{
     Capabilities, NetworkCapability, FilesystemCapability, 
     EnvironmentCapability, ProcessCapability, PortRange, HostSpec
@@ -319,7 +319,11 @@ impl SandboxManifest {
     /// Load a manifest from a file
     pub fn from_path(path: &Path) -> Result<Self> {
         let content = fs::read_to_string(path)
-            .map_err(|e| Error::FileSystem(format!("Failed to read manifest: {}", e)))?;
+            .map_err(|e| Error::Filesystem { 
+                operation: "read_manifest".to_string(), 
+                path: path.to_path_buf(),
+                reason: e.to_string() 
+            })?;
         
         Self::from_str(&content)
     }
@@ -333,7 +337,11 @@ impl SandboxManifest {
         
         // Try to parse as JSON
         serde_json::from_str::<SandboxManifest>(content)
-            .map_err(|e| Error::InvalidConfig(format!("Failed to parse manifest: {}", e)))
+            .map_err(|e| SandboxError::Configuration {
+                message: format!("Failed to parse manifest: {}", e),
+                suggestion: Some("Check manifest syntax - supports both TOML and JSON".to_string()),
+                field: Some("manifest".to_string()),
+            })
     }
     
     /// Convert to runtime configuration
@@ -361,7 +369,7 @@ impl SandboxManifest {
                     // Parse host spec (format: "hostname:port" or "hostname:port-range")
                     let parts: Vec<&str> = host_spec.split(':').collect();
                     if parts.len() != 2 {
-                        return Err(Error::InvalidConfig(format!("Invalid host spec: {}", host_spec)));
+                        return Err(SandboxError::config_error(format!("Invalid host spec: {}", host_spec), None));
                     }
                     
                     let host = parts[0].to_string();
@@ -370,18 +378,18 @@ impl SandboxManifest {
                     let ports = if port_spec.contains('-') {
                         let port_parts: Vec<&str> = port_spec.split('-').collect();
                         if port_parts.len() != 2 {
-                            return Err(Error::InvalidConfig(format!("Invalid port range: {}", port_spec)));
+                            return Err(SandboxError::config_error(format!("Invalid port range: {}", port_spec), None));
                         }
                         
                         let start = port_parts[0].parse::<u16>()
-                            .map_err(|_| Error::InvalidConfig(format!("Invalid port: {}", port_parts[0])))?;
+                            .map_err(|_| SandboxError::config_error(format!("Invalid port: {}", port_parts[0]), None))?;
                         let end = port_parts[1].parse::<u16>()
-                            .map_err(|_| Error::InvalidConfig(format!("Invalid port: {}", port_parts[1])))?;
+                            .map_err(|_| SandboxError::config_error(format!("Invalid port: {}", port_parts[1]), None))?;
                         
                         Some(PortRange::new(start, end))
                     } else {
                         let port = port_spec.parse::<u16>()
-                            .map_err(|_| Error::InvalidConfig(format!("Invalid port: {}", port_spec)))?;
+                            .map_err(|_| SandboxError::config_error(format!("Invalid port: {}", port_spec), None))?;
                         
                         Some(PortRange::single(port))
                     };
@@ -401,18 +409,18 @@ impl SandboxManifest {
                     if port_spec.contains('-') {
                         let port_parts: Vec<&str> = port_spec.split('-').collect();
                         if port_parts.len() != 2 {
-                            return Err(Error::InvalidConfig(format!("Invalid port range: {}", port_spec)));
+                            return Err(SandboxError::config_error(format!("Invalid port range: {}", port_spec), None));
                         }
                         
                         let start = port_parts[0].parse::<u16>()
-                            .map_err(|_| Error::InvalidConfig(format!("Invalid port: {}", port_parts[0])))?;
+                            .map_err(|_| SandboxError::config_error(format!("Invalid port: {}", port_parts[0]), None))?;
                         let end = port_parts[1].parse::<u16>()
-                            .map_err(|_| Error::InvalidConfig(format!("Invalid port: {}", port_parts[1])))?;
+                            .map_err(|_| SandboxError::config_error(format!("Invalid port: {}", port_parts[1]), None))?;
                         
                         ports.push(PortRange::new(start, end));
                     } else {
                         let port = port_spec.parse::<u16>()
-                            .map_err(|_| Error::InvalidConfig(format!("Invalid port: {}", port_spec)))?;
+                            .map_err(|_| SandboxError::config_error(format!("Invalid port: {}", port_spec), None))?;
                         
                         ports.push(PortRange::single(port));
                     }
@@ -422,7 +430,7 @@ impl SandboxManifest {
             },
             "full" => NetworkCapability::Full,
             _ => {
-                return Err(Error::InvalidConfig(format!("Invalid network mode: {}", self.capabilities.network.mode)));
+                return Err(SandboxError::config_error(format!("Invalid network mode: {}", self.capabilities.network.mode), None));
             }
         };
         
@@ -451,7 +459,7 @@ impl SandboxManifest {
             ),
             "full" => EnvironmentCapability::Full,
             _ => {
-                return Err(Error::InvalidConfig(format!("Invalid environment mode: {}", self.capabilities.environment.mode)));
+                return Err(SandboxError::config_error(format!("Invalid environment mode: {}", self.capabilities.environment.mode), None));
             }
         };
         
@@ -494,7 +502,7 @@ fn parse_size(size: &str) -> Result<u64> {
     let size = size.trim();
     
     if size.is_empty() {
-        return Err(Error::InvalidConfig("Empty size string".to_string()));
+        return Err(SandboxError::config_error("Empty size string".to_string(), None));
     }
     
     let mut num_str = String::new();
@@ -509,19 +517,21 @@ fn parse_size(size: &str) -> Result<u64> {
     }
     
     if num_str.is_empty() {
-        return Err(Error::InvalidConfig(format!("Invalid size format: {}", size)));
+        return Err(SandboxError::config_error(format!("Invalid size format: {}", size), None));
     }
     
     let num: f64 = num_str.parse()
-        .map_err(|_| Error::InvalidConfig(format!("Invalid number: {}", num_str)))?;
+        .map_err(|_| SandboxError::config_error(format!("Invalid number: {}", num_str), None))?;
     
     let multiplier = match suffix.trim().to_uppercase().as_str() {
         "" | "B" => 1,
         "K" | "KB" => 1024,
         "M" | "MB" => 1024 * 1024,
         "G" | "GB" => 1024 * 1024 * 1024,
-        _ => return Err(Error::InvalidConfig(format!("Invalid size suffix: {}", suffix))),
+        _ => return Err(SandboxError::config_error(format!("Invalid size suffix: {}", suffix), None)),
     };
     
     Ok((num * multiplier as f64) as u64)
 }
+
+

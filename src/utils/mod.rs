@@ -17,7 +17,11 @@ pub fn dir_exists(path: &Path) -> bool {
 pub fn ensure_dir_exists(path: &Path) -> Result<()> {
     if !path.exists() {
         std::fs::create_dir_all(path)
-            .map_err(|e| crate::error::Error::FileSystem(format!("Failed to create directory: {}", e)))?;
+            .map_err(|e| crate::error::Error::Filesystem { 
+                operation: "create_directory".to_string(), 
+                path: path.to_path_buf(),
+                reason: e.to_string() 
+            })?;
     }
     Ok(())
 }
@@ -25,15 +29,19 @@ pub fn ensure_dir_exists(path: &Path) -> Result<()> {
 /// Get a temporary directory
 pub fn temp_dir() -> Result<tempfile::TempDir> {
     tempfile::tempdir()
-        .map_err(|e| crate::error::Error::FileSystem(format!("Failed to create temporary directory: {}", e)))
+        .map_err(|e| crate::error::Error::Filesystem { 
+            operation: "create_temp_directory".to_string(), 
+            path: std::env::temp_dir(),
+            reason: e.to_string() 
+        })
 }
 
 /// Get a random string
 pub fn random_string(len: usize) -> String {
-    use rand::{Rng, thread_rng};
-    use rand::distributions::Alphanumeric;
+    use rand::{Rng, rng};
+    use rand::distr::Alphanumeric;
     
-    thread_rng()
+    rng()
         .sample_iter(&Alphanumeric)
         .take(len)
         .map(char::from)

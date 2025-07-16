@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::net::{IpAddr, SocketAddr};
 
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, SecurityContext};
 use crate::security::{
     NetworkCapability, FilesystemCapability, 
     EnvironmentCapability, ProcessCapability, TimeCapability, RandomCapability
@@ -100,56 +100,62 @@ impl CapabilityVerifier for NetworkVerifier {
         match operation {
             "connect" => {
                 if params.len() < 2 {
-                    return Err(Error::Capability("Missing host and port for connect".to_string()));
+                    return Err(Error::Capability { message: "Missing host and port for connect".to_string() });
                 }
                 
                 let host = params[0];
                 let port = params[1].parse::<u16>().map_err(|_| {
-                    Error::Capability(format!("Invalid port: {}", params[1]))
+                    Error::Capability { message: format!("Invalid port: {}", params[1]) }
                 })?;
                 
                 let secure = params.get(2).map(|s| *s == "secure").unwrap_or(false);
                 
                 if !self.is_host_allowed(host, port, secure) {
-                    return Err(Error::SecurityViolation(
-                        format!("Network access denied to {}:{}", host, port)
-                    ));
+                    return Err(Error::SecurityViolation {
+                        violation: format!("Network access denied to {}:{}", host, port),
+                        instance_id: None,
+                        context: create_security_context("connect", "network.connect", &[]),
+                    });
                 }
             }
             "bind" => {
                 if params.len() < 2 {
-                    return Err(Error::Capability("Missing host and port for bind".to_string()));
+                    return Err(Error::Capability { message: "Missing host and port for bind".to_string() });
                 }
                 
                 let host = params[0];
                 let port = params[1].parse::<u16>().map_err(|_| {
-                    Error::Capability(format!("Invalid port: {}", params[1]))
+                    Error::Capability { message: format!("Invalid port: {}", params[1]) }
                 })?;
                 
                 if !self.is_host_allowed(host, port, false) {
-                    return Err(Error::SecurityViolation(
-                        format!("Network binding denied to {}:{}", host, port)
-                    ));
+                    return Err(Error::SecurityViolation {
+                        violation: format!("Network binding denied to {}:{}", host, port),
+                        instance_id: None,
+                        context: create_security_context("bind", "network.bind", &[]),
+                    });
                 }
             }
             "listen" => {
                 if params.len() < 1 {
-                    return Err(Error::Capability("Missing port for listen".to_string()));
+                    return Err(Error::Capability { message: "Missing port for listen".to_string() });
                 }
                 
                 let port = params[0].parse::<u16>().map_err(|_| {
-                    Error::Capability(format!("Invalid port: {}", params[0]))
+                    Error::Capability { message: format!("Invalid port: {}", params[0]) }
                 })?;
                 
                 // For listen, we check if the loopback address is allowed with this port
                 if !self.is_host_allowed("127.0.0.1", port, false) {
-                    return Err(Error::SecurityViolation(
-                        format!("Network listening denied on port {}", port)
-                    ));
+                    return Err(Error::SecurityViolation {
+                        violation: format!("Network listening denied on port {}", port),
+                        instance_id: None,
+                        context: create_security_context("listen", "network.listen", &[]),
+                    });
                 }
             }
             _ => {
-                return Err(Error::Capability(format!("Unknown network operation: {}", operation)));
+                return Err(Error::Capability { message: format!("Unknown network operation: {}", operation) });
             }
         }
         
@@ -256,75 +262,91 @@ impl CapabilityVerifier for FilesystemVerifier {
         match operation {
             "open" | "read" => {
                 if params.is_empty() {
-                    return Err(Error::Capability("Missing path for open/read".to_string()));
+                    return Err(Error::Capability { message: "Missing path for open/read".to_string() });
                 }
                 
                 let path = Path::new(params[0]);
                 if !self.is_readable(path) {
-                    return Err(Error::SecurityViolation(
-                        format!("File read access denied: {}", path.display())
-                    ));
+                    return Err(Error::SecurityViolation {
+                        violation: format!("File read access denied: {}", path.display()),
+                        instance_id: None,
+                        context: create_security_context("read", "filesystem.read", &[]),
+                    });
                 }
             }
             "write" | "append" => {
                 if params.is_empty() {
-                    return Err(Error::Capability("Missing path for write/append".to_string()));
+                    return Err(Error::Capability { message: "Missing path for write/append".to_string() });
                 }
                 
                 let path = Path::new(params[0]);
                 if !self.is_writable(path) {
-                    return Err(Error::SecurityViolation(
-                        format!("File write access denied: {}", path.display())
-                    ));
+                    return Err(Error::SecurityViolation {
+                        violation: format!("File write access denied: {}", path.display()),
+                        instance_id: None,
+                        context: create_security_context("write", "filesystem.write", &[]),
+                    });
                 }
                 
                 // Check size limit if provided
                 if params.len() > 1 {
                     let size = params[1].parse::<u64>().map_err(|_| {
-                        Error::Capability(format!("Invalid size: {}", params[1]))
+                        Error::Capability { message: format!("Invalid size: {}", params[1]) }
                     })?;
                     
                     if !self.is_size_allowed(size) {
-                        return Err(Error::ResourceLimit(
-                            format!("File size limit exceeded: {}", size)
-                        ));
+                        return Err(Error::ResourceLimit {
+                            message: format!("File size limit exceeded: {}", size)
+                        });
                     }
                 }
             }
             "create" => {
                 if params.is_empty() {
-                    return Err(Error::Capability("Missing path for create".to_string()));
+                    return Err(Error::Capability { message: "Missing path for create".to_string() });
                 }
                 
                 if !self.can_create() {
-                    return Err(Error::SecurityViolation("File creation is not allowed".to_string()));
+                    return Err(Error::SecurityViolation {
+                        violation: "File creation is not allowed".to_string(),
+                        instance_id: None,
+                        context: create_security_context("create", "filesystem.create", &[]),
+                    });
                 }
                 
                 let path = Path::new(params[0]);
                 if !self.is_writable(path) {
-                    return Err(Error::SecurityViolation(
-                        format!("File creation access denied: {}", path.display())
-                    ));
+                    return Err(Error::SecurityViolation {
+                        violation: format!("File creation access denied: {}", path.display()),
+                        instance_id: None,
+                        context: create_security_context("create", "filesystem.create", &[]),
+                    });
                 }
             }
             "delete" | "remove" => {
                 if params.is_empty() {
-                    return Err(Error::Capability("Missing path for delete/remove".to_string()));
+                    return Err(Error::Capability { message: "Missing path for delete/remove".to_string() });
                 }
                 
                 if !self.can_delete() {
-                    return Err(Error::SecurityViolation("File deletion is not allowed".to_string()));
+                    return Err(Error::SecurityViolation {
+                        violation: "File deletion is not allowed".to_string(),
+                        instance_id: None,
+                        context: create_security_context("delete", "filesystem.delete", &[]),
+                    });
                 }
                 
                 let path = Path::new(params[0]);
                 if !self.is_writable(path) {
-                    return Err(Error::SecurityViolation(
-                        format!("File deletion access denied: {}", path.display())
-                    ));
+                    return Err(Error::SecurityViolation {
+                        violation: format!("File deletion access denied: {}", path.display()),
+                        instance_id: None,
+                        context: create_security_context("delete", "filesystem.delete", &[]),
+                    });
                 }
             }
             _ => {
-                return Err(Error::Capability(format!("Unknown filesystem operation: {}", operation)));
+                return Err(Error::Capability { message: format!("Unknown filesystem operation: {}", operation) });
             }
         }
         
@@ -372,25 +394,29 @@ impl CapabilityVerifier for EnvironmentVerifier {
         match operation {
             "get" | "set" => {
                 if params.is_empty() {
-                    return Err(Error::Capability("Missing variable name".to_string()));
+                    return Err(Error::Capability { message: "Missing variable name".to_string() });
                 }
                 
                 let var = params[0];
                 if !self.is_var_allowed(var) {
-                    return Err(Error::SecurityViolation(
-                        format!("Environment variable access denied: {}", var)
-                    ));
+                    return Err(Error::SecurityViolation {
+                        violation: format!("Environment variable access denied: {}", var),
+                        instance_id: None,
+                        context: create_security_context("get", "environment.get", &[]),
+                    });
                 }
                 
                 // For "set", additionally check if we're in Full mode
                 if operation == "set" && !matches!(self.capability, EnvironmentCapability::Full) {
-                    return Err(Error::SecurityViolation(
-                        format!("Setting environment variables is not allowed: {}", var)
-                    ));
+                    return Err(Error::SecurityViolation {
+                        violation: format!("Setting environment variables is not allowed: {}", var),
+                        instance_id: None,
+                        context: create_security_context("set", "environment.set", &[]),
+                    });
                 }
             }
             _ => {
-                return Err(Error::Capability(format!("Unknown environment operation: {}", operation)));
+                return Err(Error::Capability { message: format!("Unknown environment operation: {}", operation) });
             }
         }
         
@@ -440,18 +466,20 @@ impl CapabilityVerifier for ProcessVerifier {
         match operation {
             "exec" | "spawn" => {
                 if params.is_empty() {
-                    return Err(Error::Capability("Missing command".to_string()));
+                    return Err(Error::Capability { message: "Missing command".to_string() });
                 }
                 
                 let command = params[0];
                 if !self.is_command_allowed(command) {
-                    return Err(Error::SecurityViolation(
-                        format!("Process execution denied: {}", command)
-                    ));
+                    return Err(Error::SecurityViolation {
+                        violation: format!("Process execution denied: {}", command),
+                        instance_id: None,
+                        context: create_security_context("exec", "process.exec", &[]),
+                    });
                 }
             }
             _ => {
-                return Err(Error::Capability(format!("Unknown process operation: {}", operation)));
+                return Err(Error::Capability { message: format!("Unknown process operation: {}", operation) });
             }
         }
         
@@ -485,12 +513,16 @@ impl CapabilityVerifier for TimeVerifier {
             }
             "set" => {
                 if !self.can_set_time() {
-                    return Err(Error::SecurityViolation("Setting time is not allowed".to_string()));
+                    return Err(Error::SecurityViolation {
+                        violation: "Setting time is not allowed".to_string(),
+                        instance_id: None,
+                        context: create_security_context("set", "time.set", &[]),
+                    });
                 }
                 Ok(())
             }
             _ => {
-                Err(Error::Capability(format!("Unknown time operation: {}", operation)))
+                Err(Error::Capability { message: format!("Unknown time operation: {}", operation) })
             }
         }
     }
@@ -523,20 +555,37 @@ impl CapabilityVerifier for RandomVerifier {
         match operation {
             "pseudo" => {
                 if !self.can_pseudo_random() {
-                    return Err(Error::SecurityViolation("Pseudo-random generation is not allowed".to_string()));
+                    return Err(Error::SecurityViolation {
+                        violation: "Pseudo-random generation is not allowed".to_string(),
+                        instance_id: None,
+                        context: create_security_context("pseudo", "random.pseudo", &[]),
+                    });
                 }
                 Ok(())
             }
             "secure" => {
                 if !self.can_secure_random() {
-                    return Err(Error::SecurityViolation("Secure random generation is not allowed".to_string()));
+                    return Err(Error::SecurityViolation {
+                        violation: "Secure random generation is not allowed".to_string(),
+                        instance_id: None,
+                        context: create_security_context("secure", "random.secure", &[]),
+                    });
                 }
                 Ok(())
             }
             _ => {
-                Err(Error::Capability(format!("Unknown random operation: {}", operation)))
+                Err(Error::Capability { message: format!("Unknown random operation: {}", operation) })
             }
         }
+    }
+}
+
+/// Helper function to create SecurityContext for capability violations
+fn create_security_context(operation: &str, required_capability: &str, available_capabilities: &[&str]) -> SecurityContext {
+    SecurityContext {
+        attempted_operation: operation.to_string(),
+        required_capability: required_capability.to_string(),
+        available_capabilities: available_capabilities.iter().map(|s| s.to_string()).collect(),
     }
 }
 
@@ -590,7 +639,7 @@ impl CapabilityManager {
             "process" | "proc" => self.process.verify(operation, params),
             "time" => self.time.verify(operation, params),
             "random" | "rand" => self.random.verify(operation, params),
-            _ => Err(Error::Capability(format!("Unknown capability domain: {}", domain))),
+            _ => Err(Error::Capability { message: format!("Unknown capability domain: {}", domain) }),
         }
     }
 }

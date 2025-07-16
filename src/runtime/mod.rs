@@ -80,6 +80,11 @@ impl ModuleId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
+    
+    /// Get the underlying UUID
+    pub fn as_uuid(&self) -> Uuid {
+        self.0
+    }
 }
 
 impl std::fmt::Display for ModuleId {
@@ -271,15 +276,15 @@ pub trait WasmRuntime: Send + Sync {
 }
 
 /// Create a runtime with the given configuration
-pub fn create_runtime(config: &RuntimeConfig) -> Result<Box<dyn WasmRuntime>> {
+pub fn create_runtime(_config: &RuntimeConfig) -> Result<Box<dyn WasmRuntime>> {
     #[cfg(feature = "wasmtime-runtime")]
     {
-        Ok(Box::new(crate::runtime::wasmtime::WasmtimeRuntime::new(config)?))
+        Ok(Box::new(crate::runtime::wasmtime::WasmtimeRuntime::new(_config)?))
     }
 
     #[cfg(all(feature = "wasmer-runtime", not(feature = "wasmtime-runtime")))]
     {
-        return Ok(Box::new(crate::runtime::wasmer::WasmerRuntime::new(config)?));
+        return Ok(Box::new(crate::runtime::wasmer::WasmerRuntime::new()?));
     }
 
     #[cfg(not(any(feature = "wasmtime-runtime", feature = "wasmer-runtime")))]
@@ -295,6 +300,7 @@ pub mod wasmtime;
 #[cfg(feature = "wasmer-runtime")]
 pub mod wasmer;
 pub mod wasm_common;
+pub mod component;
 
 // Re-export runtimes for convenience
 #[cfg(feature = "wasmtime-runtime")]

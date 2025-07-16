@@ -168,7 +168,10 @@ codegen-units = 1
                 
                 Ok(template)
             }
-            _ => Err(Error::WrapperGeneration("Not an HTTP server application".to_string())),
+            _ => Err(Error::WrapperGeneration {
+                reason: "Not an HTTP server application".to_string(),
+                wrapper_type: Some("http_server".to_string()),
+            }),
         }
     }
 }

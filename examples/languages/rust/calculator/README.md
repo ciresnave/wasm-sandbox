@@ -30,6 +30,7 @@ cargo run --bin example
 ```
 
 The example would:
+
 1. Auto-detect this is a Rust project
 2. Auto-compile to WebAssembly
 3. Create a secure sandbox
@@ -65,6 +66,7 @@ pub fn reverse_string(input: &str) -> String
 This example demonstrates the core value proposition:
 
 ### Before (Complex)
+
 ```rust
 // Manual WASM compilation
 // Complex sandbox setup  
@@ -75,6 +77,7 @@ This example demonstrates the core value proposition:
 ```
 
 ### After (Simple)
+
 ```rust
 let result = wasm_sandbox::run("./calculator/", "add", &(5, 3))?;
 ```

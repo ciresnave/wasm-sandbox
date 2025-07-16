@@ -7,6 +7,7 @@ The current wasm-sandbox API requires too much ceremony for simple use cases. Us
 ## Core Principle: Progressive Complexity
 
 The API should follow a "pit of success" design:
+
 1. **Dead simple** for basic use cases (auto-compile, sane defaults)
 2. **Progressively more control** as needs become complex
 3. **Full customization** available but not required
@@ -84,6 +85,7 @@ let sandbox = WasmSandbox::with_config(config)?;
 The crate should automatically detect and compile source code:
 
 ### Rust Projects
+
 ```rust
 // Detects Cargo.toml, compiles to WASM
 let sandbox = WasmSandbox::from_source("./rust_project/")?;
@@ -93,18 +95,21 @@ let sandbox = WasmSandbox::from_file("./calculator.rs")?;
 ```
 
 ### Python Scripts
+
 ```rust
 // Uses PyO3 or similar to compile Python to WASM
 let sandbox = WasmSandbox::from_source("./python_script.py")?;
 ```
 
 ### C/C++ Projects
+
 ```rust
 // Uses Emscripten toolchain
 let sandbox = WasmSandbox::from_source("./c_project/")?;
 ```
 
 ### JavaScript/TypeScript
+
 ```rust
 // Uses tools like AssemblyScript
 let sandbox = WasmSandbox::from_source("./js_project/")?;
@@ -196,6 +201,7 @@ fn parse_duration(s: &str) -> Duration {
 You're absolutely right about needing examples for all major WASM-compatible languages:
 
 ### Rust Example
+
 ```rust
 // examples/languages/rust_calculator/
 // - Cargo.toml (WASM target)
@@ -211,6 +217,7 @@ let result = wasm_sandbox::run(
 ```
 
 ### Python Example
+
 ```rust
 // examples/languages/python_text_processor/
 // - requirements.txt (if needed)
@@ -226,6 +233,7 @@ let result = wasm_sandbox::run(
 ```
 
 ### C Example
+
 ```rust
 // examples/languages/c_math_library/
 // - Makefile (WASM compilation)
@@ -234,6 +242,7 @@ let result = wasm_sandbox::run(
 ```
 
 ### JavaScript/AssemblyScript Example
+
 ```rust
 // examples/languages/js_data_transformer/
 // - package.json (AssemblyScript setup)
@@ -242,6 +251,7 @@ let result = wasm_sandbox::run(
 ```
 
 ### Go Example
+
 ```rust
 // examples/languages/go_web_scraper/
 // - go.mod (TinyGo for WASM)
@@ -252,21 +262,25 @@ let result = wasm_sandbox::run(
 ## Benefits of This Approach
 
 ### 1. **Lower Barrier to Entry**
+
 - New users can be productive immediately
 - No need to understand WASM compilation
 - No need to understand complex security models initially
 
 ### 2. **Better Developer Experience**
+
 - Auto-compilation removes build system knowledge requirement
 - Human-readable configuration (e.g., "64MB" instead of `67108864`)
 - Sensible defaults prevent security misconfigurations
 
 ### 3. **Broader Adoption**
+
 - Developers from any language can try wasm-sandbox
 - Examples in their native language make it approachable
 - Progressive complexity allows growth with needs
 
 ### 4. **Production Ready**
+
 - Simple API still provides security by default
 - Advanced configuration available when needed
 - Auto-compilation can be cached for performance
@@ -274,22 +288,26 @@ let result = wasm_sandbox::run(
 ## Implementation Plan
 
 ### Phase 1: Simple API Layer
+
 1. Implement one-line `wasm_sandbox::run()` function
 2. Add `WasmSandbox::from_source()` with Rust support
 3. Create builder pattern with human-readable options
 
 ### Phase 2: Multi-Language Support
+
 1. Add Python compilation support
 2. Add C/C++ compilation support  
 3. Add JavaScript/AssemblyScript support
 4. Add Go (TinyGo) support
 
 ### Phase 3: Examples and Documentation
+
 1. Create working examples for each language
 2. Add tutorials for each language
 3. Create "language-specific getting started" guides
 
 ### Phase 4: Advanced Features
+
 1. Caching for repeated compilations
 2. Hot reload for development
 3. IDE integration helpers
@@ -309,6 +327,7 @@ let module_id = sandbox.load_module(&wasm_bytes)?;
 ```
 
 This allows:
+
 - Existing users keep working code
 - New users get simple onboarding
 - Complex needs still fully supported

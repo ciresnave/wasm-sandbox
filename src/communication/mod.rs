@@ -19,13 +19,17 @@ pub trait CommunicationChannel: Send + Sync {
     fn close(&self) -> Result<()>;
 }
 
+// Type aliases for complex types to improve readability
+type StringHandlerFunction = Box<dyn Fn(&str) -> Result<String> + Send + Sync + 'static>;
+type ByteHandlerFunction = Box<dyn Fn(&[u8]) -> Result<Vec<u8>> + Send + Sync + 'static>;
+
 /// RPC mechanism between host and guest (dyn-compatible part)
 pub trait RpcChannel: Send + Sync {
     /// Register a host function with JSON serialization
     fn register_host_function_json(
         &mut self,
         name: &str,
-        function: Box<dyn Fn(&str) -> Result<String> + Send + Sync + 'static>,
+        function: StringHandlerFunction,
     ) -> Result<()>;
     
     /// Call a function in the guest with JSON serialization
@@ -39,7 +43,7 @@ pub trait RpcChannel: Send + Sync {
     fn register_host_function_msgpack(
         &mut self,
         name: &str,
-        function: Box<dyn Fn(&[u8]) -> Result<Vec<u8>> + Send + Sync + 'static>,
+        function: ByteHandlerFunction,
     ) -> Result<()>;
     
     /// Call a function in the guest with MessagePack serialization
@@ -126,6 +130,9 @@ pub mod io;
 pub mod rpc;
 pub mod memory;
 pub mod memory_channel;
+pub mod streaming;
 
 // Re-export memory channel for easier usage
 pub use memory_channel::{MemoryChannel, MemoryRpcChannel, MemoryChannelConfig};
+pub use streaming::{StreamingChannel, StreamingInput, StreamingOutput, StreamingChannel2Way, 
+                   StreamChunk, StreamingManager, StreamingFactory};

@@ -63,13 +63,21 @@ impl CommunicationChannel for MessageChannel {
     fn send_to_guest(&self, message: &[u8]) -> Result<()> {
         // Check if closed
         if *self.closed.lock().unwrap() {
-            return Err(Error::Communication("Channel is closed".to_string()));
+            return Err(Error::Communication {
+                channel: "host_to_guest".to_string(),
+                reason: "Channel is closed".to_string(),
+                instance_id: None,
+            });
         }
         
         // Send the message
         let mut queue = self.host_to_guest.lock().unwrap();
         if queue.len() >= self.capacity {
-            return Err(Error::Communication("Channel is full".to_string()));
+            return Err(Error::Communication {
+                channel: "host_to_guest".to_string(),
+                reason: "Channel is full".to_string(),
+                instance_id: None,
+            });
         }
         
         queue.push_back(message.to_vec());
@@ -83,7 +91,11 @@ impl CommunicationChannel for MessageChannel {
     fn receive_from_guest(&self) -> Result<Vec<u8>> {
         // Check if closed
         if *self.closed.lock().unwrap() {
-            return Err(Error::Communication("Channel is closed".to_string()));
+            return Err(Error::Communication {
+                channel: "guest_to_host".to_string(),
+                reason: "Channel is closed".to_string(),
+                instance_id: None,
+            });
         }
         
         // Receive the message
@@ -95,7 +107,11 @@ impl CommunicationChannel for MessageChannel {
             
             Ok(message)
         } else {
-            Err(Error::Communication("No messages available".to_string()))
+            Err(Error::Communication {
+                channel: "guest_to_host".to_string(),
+                reason: "No messages available".to_string(),
+                instance_id: None,
+            })
         }
     }
     
@@ -145,7 +161,11 @@ impl GuestChannelInterface {
     pub fn send(&self, _message: &[u8]) -> Result<()> {
         // Check if closed
         if self.closed {
-            return Err(Error::Communication("Channel is closed".to_string()));
+            return Err(Error::Communication {
+                channel: "guest_to_host".to_string(),
+                reason: "Channel is closed".to_string(),
+                instance_id: None,
+            });
         }
         
         // In a real implementation, we would need to use thread-safe mechanisms
@@ -158,13 +178,21 @@ impl GuestChannelInterface {
     pub fn receive(&self) -> Result<Vec<u8>> {
         // Check if closed
         if self.closed {
-            return Err(Error::Communication("Channel is closed".to_string()));
+            return Err(Error::Communication {
+                channel: "host_to_guest".to_string(),
+                reason: "Channel is closed".to_string(),
+                instance_id: None,
+            });
         }
         
         // In a real implementation, we would need to use thread-safe mechanisms
         // This is a simplified implementation
         
-        Err(Error::Communication("No messages available".to_string()))
+        Err(Error::Communication {
+            channel: "host_to_guest".to_string(),
+            reason: "No messages available".to_string(),
+            instance_id: None,
+        })
     }
     
     /// Check if there are pending messages

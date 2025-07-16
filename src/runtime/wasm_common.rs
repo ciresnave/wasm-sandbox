@@ -14,7 +14,9 @@ pub trait ToWasmValues {
 /// Function result conversion
 pub trait FromWasmValues {
     /// Convert from WebAssembly values
-    fn from_wasm_values(values: &[u8]) -> Self;
+    fn from_wasm_values(values: &[u8]) -> crate::Result<Self>
+    where
+        Self: Sized;
 }
 
 impl<T: Serialize> ToWasmValues for T {
@@ -24,8 +26,14 @@ impl<T: Serialize> ToWasmValues for T {
 }
 
 impl<T: for<'de> Deserialize<'de>> FromWasmValues for T {
-    fn from_wasm_values(values: &[u8]) -> Self {
-        rmp_serde::from_slice(values).unwrap_or_else(|_| panic!("Failed to deserialize WebAssembly values"))
+    fn from_wasm_values(values: &[u8]) -> crate::Result<Self> {
+        rmp_serde::from_slice(values).map_err(|e| {
+            crate::Error::Serialization {
+                format: "messagepack".to_string(),
+                operation: "deserialize".to_string(),
+                reason: e.to_string(),
+            }
+        })
     }
 }
 

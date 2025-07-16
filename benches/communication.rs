@@ -1,5 +1,6 @@
 //! Benchmarks for the different communication channels
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use std::hint::black_box;
 use wasm_sandbox::{
     WasmSandbox,
     communication::{
@@ -55,7 +56,7 @@ fn bench_rpc_channel_calls(c: &mut Criterion) {
     
     // Register a test function
     let test_func = Box::new(|data: &str| -> wasm_sandbox::Result<String> {
-        Ok(format!("Echo: {}", data))
+        Ok(format!("Echo: {data}"))
     });
     rpc_channel.register_host_function_json("test_echo", test_func).unwrap();
     

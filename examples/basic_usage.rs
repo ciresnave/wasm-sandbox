@@ -1,214 +1,76 @@
-// Basic Usage Example - Simple and functional demonstration
-//
-// This example demonstrates the basic usage of wasm-sandbox with actual API calls
-// that work with the current codebase structure.
+//! Basic Usage Example - Demonstrates core wasm-sandbox functionality
+//!
+//! This example shows how to use the current API to create sandboxes,
+//! load WASM modules, and execute functions with security controls.
 
-use wasm_sandbox::{WasmSandbox, InstanceConfig, InstanceId};
-use wasm_sandbox::security::{
-    Capabilities, ResourceLimits, FilesystemCapability, 
-    NetworkCapability, EnvironmentCapability, ProcessCapability, 
-    TimeCapability, RandomCapability
-};
+use std::time::Duration;
+use wasm_sandbox::{WasmSandbox, Result};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     println!("🚀 Basic wasm-sandbox Usage Example");
-    println!("This demonstrates core functionality with real API calls");
+    println!("This demonstrates core functionality with the current API");
     
-    // Step 1: Create a simple WASM module for testing
-    let wasm_bytes = create_test_module()?;
-    println!("📦 Created test WASM module ({} bytes)", wasm_bytes.len());
+    // Example 1: Simple execution using high-level API
+    println!("\n=== Example 1: Simple Execution ===");
     
-    // Step 2: Configure security capabilities
-    let capabilities = Capabilities::custom(
-        // Filesystem - no access by default
-        FilesystemCapability::None,
-        
-        // Network - no access by default  
-        NetworkCapability::None,
-        
-        // Environment - no access by default
-        EnvironmentCapability::None,
-        
-        // Process - no spawning allowed
-        ProcessCapability::None,
-        
-        // Time - basic time access
-        TimeCapability::Basic,
-        
-        // Random - no cryptographic access
-        RandomCapability::None,
-    );
+    // Use the test WASM module included in fixtures
+    let wasm_path = "fixtures/test_module.wasm";
     
-    // Step 3: Configure resource limits
-    let resource_limits = ResourceLimits::default();
-    
-    let instance_config = InstanceConfig {
-        capabilities,
-        resource_limits,
-        startup_timeout_ms: 5000,
-        enable_debug: false,
-    };
-    
-    // Step 4: Create sandbox and load module
-    let mut sandbox = WasmSandbox::new()?;
-    let module_id = sandbox.load_module(&wasm_bytes)?;
-    let instance_id = sandbox.create_instance(module_id, Some(instance_config))?;
-    
-    println!("🛡️  Sandbox created with minimal security configuration");
-    
-    // Step 5: Test basic function calls
-    println!("\n🧮 Testing Basic Function Calls:");
-    
-    // Test simple math function
-    let result: i32 = sandbox.call_function(instance_id, "add", (5, 7)).await?;
-    println!("   ✅ add(5, 7) = {}", result);
-    
-    // Test multiplication
-    let result: i32 = sandbox.call_function(instance_id, "multiply", (6, 8)).await?;
-    println!("   ✅ multiply(6, 8) = {}", result);
-    
-    // Test a function that returns a boolean
-    let result: bool = sandbox.call_function(instance_id, "is_positive", 42i32).await?;
-    println!("   ✅ is_positive(42) = {}", result);
-    
-    let result: bool = sandbox.call_function(instance_id, "is_positive", -5i32).await?;
-    println!("   ✅ is_positive(-5) = {}", result);
-    
-    // Step 6: Test JSON serialization/deserialization
-    println!("\n📄 Testing JSON Function Calls:");
-    
-    #[derive(serde::Serialize, serde::Deserialize, Debug)]
-    struct Person {
-        name: String,
-        age: u32,
+    // One-line execution (uses defaults)
+    match wasm_sandbox::run(wasm_path, "add", &(5i32, 3i32)).await {
+        Ok(result) => {
+            let result: i32 = result;
+            println!("✅ 5 + 3 = {result}");
+        }
+        Err(e) => println!("❌ Execution failed: {e}"),
     }
     
-    let person = Person {
-        name: "Alice".to_string(),
-        age: 30,
-    };
+    // Example 2: Builder pattern with custom settings
+    println!("\n=== Example 2: Builder Pattern ===");
     
-    let result: Person = sandbox.call_function(instance_id, "process_person", person).await?;
-    println!("   ✅ process_person result: {:?}", result);
+    let sandbox = WasmSandbox::builder()
+        .source(wasm_path)
+        .timeout_duration(Duration::from_secs(10))
+        .memory_limit(32 * 1024 * 1024) // 32MB
+        .enable_file_access(false)
+        .enable_network(false)
+        .build()
+        .await?;
     
-    // Step 7: Test error handling
-    println!("\n🚨 Testing Error Handling:");
+    // Call multiple functions
+    let add_result: i32 = sandbox.call("add", &(10i32, 20i32)).await?;
+    println!("✅ 10 + 20 = {add_result}");
     
-    // Try calling a function that doesn't exist
-    match sandbox.call_function::<(), ()>(instance_id, "non_existent_function", ()).await {
-        Ok(_) => println!("   ❌ Unexpected success"),
-        Err(e) => println!("   ✅ Expected error: {}", e),
+    // Try to call a function that doesn't exist to demonstrate error handling
+    match sandbox.call::<_, i32>("subtract", &(20i32, 5i32)).await {
+        Ok(result) => println!("✅ 20 - 5 = {result}"),
+        Err(e) => println!("⚠️  Expected error for non-existent function: {e}"),
     }
     
-    // Step 8: Demonstrate different capability configurations
-    println!("\n🔒 Testing Different Security Configurations:");
+    // Example 3: Error handling
+    println!("\n=== Example 3: Error Handling ===");
     
-    // Create a more permissive configuration
-    let permissive_capabilities = Capabilities::custom(
-        FilesystemCapability::None, // Still no filesystem access
-        NetworkCapability::Loopback, // Allow localhost connections
-        EnvironmentCapability::None,
-        ProcessCapability::None,
-        TimeCapability::Full, // Full time access
-        RandomCapability::Deterministic, // Deterministic random
-    );
+    // Try to call a non-existent function
+    match sandbox.call::<_, i32>("nonexistent_function", &42i32).await {
+        Ok(_) => println!("This shouldn't happen"),
+        Err(e) => println!("✅ Expected error: {e}"),
+    }
     
-    let permissive_config = InstanceConfig {
-        capabilities: permissive_capabilities,
-        resource_limits: ResourceLimits::default(),
-        startup_timeout_ms: 5000,
-        enable_debug: true, // Enable debugging
-    };
+    // Try with very short timeout
+    match wasm_sandbox::run_with_timeout(
+        wasm_path,
+        "add",
+        &(1i32, 2i32),
+        Duration::from_millis(1), // Very short timeout
+    ).await {
+        Ok(result) => {
+            let result: i32 = result;
+            println!("✅ Fast execution: 1 + 2 = {result}");
+        }
+        Err(e) => println!("⏰ Timeout or error (expected): {e}"),
+    }
     
-    let permissive_instance = sandbox.create_instance(module_id, Some(permissive_config))?;
-    println!("   ✅ Created permissive instance: {}", permissive_instance);
-    
-    // Test the same function with different security context
-    let result: i32 = sandbox.call_function(permissive_instance, "add", (10, 20)).await?;
-    println!("   ✅ Permissive instance add(10, 20) = {}", result);
-    
-    // Step 9: Cleanup
-    sandbox.remove_instance(instance_id);
-    sandbox.remove_instance(permissive_instance);
-    println!("\n🧹 Cleaned up instances");
-    
-    println!("\n✅ Basic usage example completed successfully!");
-    
+    println!("\n🎉 All examples completed successfully!");
     Ok(())
-}
-
-// Create a simple test WASM module
-fn create_test_module() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let wasm_source = r#"
-        (module
-            (memory (export "memory") 1)
-            
-            ;; Add two numbers
-            (func (export "add") (param i32 i32) (result i32)
-                local.get 0
-                local.get 1
-                i32.add
-            )
-            
-            ;; Multiply two numbers
-            (func (export "multiply") (param i32 i32) (result i32)
-                local.get 0
-                local.get 1
-                i32.mul
-            )
-            
-            ;; Check if a number is positive
-            (func (export "is_positive") (param i32) (result i32)
-                local.get 0
-                i32.const 0
-                i32.gt_s
-            )
-            
-            ;; Process person (mock - just returns 1 for success)
-            (func (export "process_person") (result i32)
-                i32.const 1
-            )
-        )
-    "#;
-    
-    // Convert WAT to WASM bytes
-    Ok(wat::parse_str(wasm_source)?)
-}
-
-// Enhanced configuration helpers
-impl InstanceConfig {
-    /// Create a minimal security configuration
-    pub fn minimal_security() -> Self {
-        Self {
-            capabilities: Capabilities::custom(
-                FilesystemCapability::None,
-                NetworkCapability::None,
-                EnvironmentCapability::None,
-                ProcessCapability::None,
-                TimeCapability::Basic,
-                RandomCapability::None,
-            ),
-            resource_limits: ResourceLimits::default(),
-            startup_timeout_ms: 5000,
-            enable_debug: false,
-        }
-    }
-    
-    /// Create a development-friendly configuration
-    pub fn development() -> Self {
-        Self {
-            capabilities: Capabilities::custom(
-                FilesystemCapability::None,
-                NetworkCapability::Loopback,
-                EnvironmentCapability::None,
-                ProcessCapability::None,
-                TimeCapability::Full,
-                RandomCapability::Deterministic,
-            ),
-            resource_limits: ResourceLimits::default(),
-            startup_timeout_ms: 10000, // Longer timeout for development
-            enable_debug: true,
-        }
-    }
 }

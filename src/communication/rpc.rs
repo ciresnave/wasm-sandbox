@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 
 use crate::error::{Error, Result};
-use crate::communication::{RpcChannel, CommunicationChannel};
+use crate::communication::{RpcChannel, CommunicationChannel, StringHandlerFunction, ByteHandlerFunction};
 
 /// JSON-RPC implementation
 pub struct JsonRpcChannel {
@@ -14,7 +14,7 @@ pub struct JsonRpcChannel {
     channel: Arc<dyn CommunicationChannel>,
     
     /// Host functions
-    host_functions: Mutex<HashMap<String, Box<dyn Fn(&str) -> Result<String> + Send + Sync>>>,
+    host_functions: Mutex<HashMap<String, StringHandlerFunction>>,
     
     /// Function call ID counter
     #[allow(dead_code)]
@@ -84,7 +84,7 @@ impl RpcChannel for JsonRpcChannel {
     fn register_host_function_json(
         &mut self,
         name: &str,
-        function: Box<dyn Fn(&str) -> Result<String> + Send + Sync + 'static>,
+        function: StringHandlerFunction,
     ) -> Result<()> {
         let mut functions = self.host_functions.lock().unwrap();
         functions.insert(name.to_string(), function);
@@ -117,7 +117,7 @@ impl RpcChannel for JsonRpcChannel {
     fn register_host_function_msgpack(
         &mut self,
         name: &str,
-        function: Box<dyn Fn(&[u8]) -> Result<Vec<u8>> + Send + Sync + 'static>,
+        function: ByteHandlerFunction,
     ) -> Result<()> {
         // Convert to JSON function for now
         let json_function = move |params_json: &str| -> Result<String> {

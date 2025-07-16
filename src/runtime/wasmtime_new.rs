@@ -224,7 +224,7 @@ impl WasmInstance for WasmtimeInstance {
                     .copy_to_slice(&mut result_data);
                 
                 // Deserialize the result
-                let result: R = FromWasmValues::from_wasm_values(&result_data);
+                let result: R = FromWasmValues::from_wasm_values(&result_data)?;
                 Ok(result)
             },
             Err(e) => {

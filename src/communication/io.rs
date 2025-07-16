@@ -108,7 +108,7 @@ impl StdioInput {
 impl Read for StdioInput {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.redirection.read_stdin(buf)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{:?}", e)))
+            .map_err(|e| io::Error::other(format!("{:?}", e)))
     }
 }
 
@@ -149,7 +149,7 @@ impl Write for StdioOutput {
         
         match result {
             Ok(_) => Ok(buf.len()),
-            Err(e) => Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", e))),
+            Err(e) => Err(io::Error::other(format!("{:?}", e))),
         }
     }
     

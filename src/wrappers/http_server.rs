@@ -237,9 +237,10 @@ impl WrapperGenerator for HttpServerGenerator {
     fn compile_wrapper(&self, code: &str, output_path: &std::path::Path) -> Result<()> {
         // For now, just write the code to the output path
         std::fs::write(output_path, code)
-            .map_err(|e| crate::error::Error::WrapperGeneration(
-                format!("Failed to write wrapper code: {}", e)
-            ))?;
+            .map_err(|e| crate::error::Error::WrapperGeneration {
+                reason: format!("Failed to write wrapper code: {}", e),
+                wrapper_type: Some("http_server".to_string()),
+            })?;
         Ok(())
     }
 }

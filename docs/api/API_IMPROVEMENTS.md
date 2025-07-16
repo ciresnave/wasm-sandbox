@@ -9,6 +9,7 @@ This document outlines planned API improvements based on real-world integration 
 **Current Problem**: The API requires too much ceremony for simple tasks.
 
 **Current "simple" usage:**
+
 ```rust
 let mut sandbox = WasmSandbox::new()?;
 let wasm_bytes = std::fs::read("module.wasm")?;
@@ -18,6 +19,7 @@ let result: i32 = sandbox.call_function(instance_id, "add", &(5, 3)).await?;
 ```
 
 **Planned "actually simple" usage:**
+
 ```rust
 // One-liner for basic cases
 let result: i32 = wasm_sandbox::run("./calculator.rs", "add", &(5, 3))?;
@@ -28,6 +30,7 @@ let result = sandbox.call("add", &(5, 3))?;
 ```
 
 **Key Improvements:**
+
 - Auto-compilation from source code (Rust, Python, C, JS, Go)
 - One-line execution for simple cases
 - Sane security defaults (secure by default)
@@ -37,6 +40,7 @@ let result = sandbox.call("add", &(5, 3))?;
 ### 2. Documentation Gaps (ADDRESSED)
 
 **Solutions Implemented:**
+
 - ✅ [`MIGRATION.md`](../guides/MIGRATION.md) - Complete v0.1.0 → v0.2.0 upgrade guide
 - ✅ [`examples/README.md`](../../examples/README.md) - Comprehensive examples overview
 - ✅ [`examples/file_processor.rs`](examples/file_processor.rs) - Real-world file processing example
@@ -451,24 +455,28 @@ pub enum OptimizationLevel {
 ## 📈 Roadmap for v0.3.0
 
 ### Phase 1: API Ergonomics (Target: 1 month)
+
 - [ ] Builder pattern for all configuration types
 - [ ] Simplified function calling API
 - [ ] Enhanced error types with context
 - [ ] Configuration validation
 
 ### Phase 2: PUP Integration Features (Target: 2 months)
+
 - [ ] Plugin ecosystem traits and helpers
 - [ ] Hot reload support
 - [ ] Streaming execution
 - [ ] Development tools integration
 
 ### Phase 3: Production Features (Target: 3 months)
+
 - [ ] Advanced observability and metrics
 - [ ] Security auditing and threat analysis
 - [ ] Multi-tenant isolation
 - [ ] Connection pooling
 
 ### Phase 4: Performance and Scale (Target: 4 months)
+
 - [ ] JIT compilation support
 - [ ] Advanced caching
 - [ ] Batch execution optimizations

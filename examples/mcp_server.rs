@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mcp_module_path = Path::new("fixtures/mcp_server.wasm");
     
     if !mcp_module_path.exists() {
-        eprintln!("WASM module not found at: {:?}", mcp_module_path);
+        eprintln!("WASM module not found at: {mcp_module_path:?}");
         eprintln!("Please build an MCP server module first using the compiler.");
         return Ok(());
     }
@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Simple test call to ensure the module works
     println!("Testing basic function call...");
     let result: i32 = sandbox.call_function(instance_id, "add", &(5, 7)).await?;
-    println!("Test call result: {}", result);
+    println!("Test call result: {result}");
     
     println!("MCP server example completed successfully");
     

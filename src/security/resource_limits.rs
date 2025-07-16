@@ -69,10 +69,10 @@ impl MemoryResourceTracker {
         let requested = current + pages as u64;
         
         if requested > self.max_memory_pages as u64 {
-            return Err(Error::ResourceLimit(
-                format!("Memory allocation of {} pages would exceed limit of {} pages", 
+            return Err(Error::ResourceLimit {
+                message: format!("Memory allocation of {} pages would exceed limit of {} pages", 
                     pages, self.max_memory_pages)
-            ));
+            });
         }
         
         // Check growth rate
@@ -91,10 +91,10 @@ impl MemoryResourceTracker {
             let total_growth: u64 = tracker.growth_events.iter().map(|(_, size)| *size).sum();
             
             if total_growth > max_rate as u64 {
-                return Err(Error::ResourceLimit(
-                    format!("Memory growth rate of {} pages/s exceeds limit of {} pages/s",
+                return Err(Error::ResourceLimit {
+                    message: format!("Memory growth rate of {} pages/s exceeds limit of {} pages/s",
                         total_growth, max_rate)
-                ));
+                });
             }
             
             tracker.last_size = requested;
@@ -206,7 +206,11 @@ impl CpuResourceTracker {
         }
         
         if current_total > self.max_execution_time.as_millis() as u64 {
-            return Err(Error::Timeout(current_total));
+            return Err(Error::Timeout {
+                operation: "execution".to_string(),
+                duration: Duration::from_millis(current_total),
+                instance_id: None,
+            });
         }
         
         Ok(())
@@ -219,9 +223,9 @@ impl CpuResourceTracker {
             if current > max as u64 {
                 // Rollback the increment
                 self.active_threads.fetch_sub(1, Ordering::AcqRel);
-                return Err(Error::ResourceLimit(
-                    format!("Thread limit of {} exceeded", max)
-                ));
+                return Err(Error::ResourceLimit {
+                    message: format!("Thread limit of {} exceeded", max)
+                });
             }
         } else {
             self.active_threads.fetch_add(1, Ordering::AcqRel);
@@ -343,9 +347,9 @@ impl IoResourceTracker {
         if current > self.max_open_files as u64 {
             // Rollback the increment
             self.open_files.fetch_sub(1, Ordering::AcqRel);
-            return Err(Error::ResourceLimit(
-                format!("Open file limit of {} exceeded", self.max_open_files)
-            ));
+            return Err(Error::ResourceLimit {
+                message: format!("Open file limit of {} exceeded", self.max_open_files)
+            });
         }
         
         Ok(())
@@ -364,9 +368,9 @@ impl IoResourceTracker {
         // Check total limit
         if let Some(limit) = self.max_total_read_bytes {
             if total > limit {
-                return Err(Error::ResourceLimit(
-                    format!("Total read limit of {} bytes exceeded", limit)
-                ));
+                return Err(Error::ResourceLimit {
+                    message: format!("Total read limit of {} bytes exceeded", limit)
+                });
             }
         }
         
@@ -386,9 +390,9 @@ impl IoResourceTracker {
             let window_total: u64 = tracker.read_events.iter().map(|(_, size)| *size).sum();
             
             if window_total > rate_limit {
-                return Err(Error::ResourceLimit(
-                    format!("Read rate limit of {} bytes/s exceeded", rate_limit)
-                ));
+                return Err(Error::ResourceLimit {
+                    message: format!("Read rate limit of {} bytes/s exceeded", rate_limit)
+                });
             }
         }
         
@@ -403,9 +407,9 @@ impl IoResourceTracker {
         // Check total limit
         if let Some(limit) = self.max_total_write_bytes {
             if total > limit {
-                return Err(Error::ResourceLimit(
-                    format!("Total write limit of {} bytes exceeded", limit)
-                ));
+                return Err(Error::ResourceLimit {
+                    message: format!("Total write limit of {} bytes exceeded", limit)
+                });
             }
         }
         
@@ -425,9 +429,9 @@ impl IoResourceTracker {
             let window_total: u64 = tracker.write_events.iter().map(|(_, size)| *size).sum();
             
             if window_total > rate_limit {
-                return Err(Error::ResourceLimit(
-                    format!("Write rate limit of {} bytes/s exceeded", rate_limit)
-                ));
+                return Err(Error::ResourceLimit {
+                    message: format!("Write rate limit of {} bytes/s exceeded", rate_limit)
+                });
             }
         }
         
@@ -519,16 +523,20 @@ impl TimeResourceTracker {
         // Check total time
         let elapsed = now.duration_since(*self.start_time.lock().unwrap());
         if elapsed > self.max_total_time {
-            return Err(Error::Timeout(elapsed.as_millis() as u64));
+            return Err(Error::Timeout {
+                operation: "total time".to_string(),
+                duration: elapsed,
+                instance_id: None,
+            });
         }
         
         // Check idle time
         if let Some(idle_limit) = self.max_idle_time {
             let idle_time = now.duration_since(*self.last_activity.lock().unwrap());
             if idle_time > idle_limit {
-                return Err(Error::ResourceLimit(
-                    format!("Idle time limit of {}ms exceeded", idle_limit.as_millis())
-                ));
+                return Err(Error::ResourceLimit {
+                    message: format!("Idle time limit of {}ms exceeded", idle_limit.as_millis())
+                });
             }
         }
         
@@ -592,7 +600,9 @@ impl ResourceLimitManager {
         // Check fuel limits
         if let Some(fuel) = &self.fuel {
             if fuel.load(Ordering::Acquire) == 0 {
-                return Err(Error::ResourceLimit("Fuel limit exceeded".to_string()));
+                return Err(Error::ResourceLimit {
+                    message: "Fuel limit exceeded".to_string()
+                });
             }
         }
         
@@ -604,9 +614,9 @@ impl ResourceLimitManager {
         if let Some(fuel) = &self.fuel {
             let current = fuel.load(Ordering::Acquire);
             if current < amount {
-                return Err(Error::ResourceLimit(
-                    format!("Not enough fuel: requested {}, available {}", amount, current)
-                ));
+                return Err(Error::ResourceLimit {
+                    message: format!("Not enough fuel: requested {}, available {}", amount, current)
+                });
             }
             
             fuel.fetch_sub(amount, Ordering::AcqRel);
@@ -621,7 +631,9 @@ impl ResourceLimitManager {
             fuel.fetch_add(amount, Ordering::AcqRel);
             Ok(())
         } else {
-            Err(Error::UnsupportedOperation("Fuel metering is not enabled".to_string()))
+            Err(Error::UnsupportedOperation {
+                message: "Fuel metering is not enabled".to_string()
+            })
         }
     }
     
@@ -631,7 +643,9 @@ impl ResourceLimitManager {
             fuel.store(amount, Ordering::Release);
             Ok(())
         } else {
-            Err(Error::UnsupportedOperation("Fuel metering is not enabled".to_string()))
+            Err(Error::UnsupportedOperation {
+                message: "Fuel metering is not enabled".to_string()
+            })
         }
     }
     

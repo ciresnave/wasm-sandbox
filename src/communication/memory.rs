@@ -34,7 +34,11 @@ impl SharedMemoryRegion {
         
         // Check if the offset is valid
         if offset >= self.size {
-            return Err(Error::Communication(format!("Invalid offset: {}", offset)));
+            return Err(Error::Communication {
+                channel: "shared_memory".to_string(),
+                reason: format!("Invalid offset: {}", offset),
+                instance_id: None,
+            });
         }
         
         // Calculate the number of bytes to read
@@ -53,7 +57,11 @@ impl SharedMemoryRegion {
         
         // Check if the offset is valid
         if offset >= self.size {
-            return Err(Error::Communication(format!("Invalid offset: {}", offset)));
+            return Err(Error::Communication {
+                channel: "shared_memory".to_string(),
+                reason: format!("Invalid offset: {}", offset),
+                instance_id: None,
+            });
         }
         
         // Calculate the number of bytes to write
@@ -95,7 +103,11 @@ impl SharedMemoryManager {
         // Check if the region already exists
         let mut regions = self.regions.lock().unwrap();
         if regions.contains_key(name) {
-            return Err(Error::Communication(format!("Region already exists: {}", name)));
+            return Err(Error::Communication {
+                channel: "shared_memory_manager".to_string(),
+                reason: format!("Region already exists: {}", name),
+                instance_id: None,
+            });
         }
         
         // Create the region
@@ -117,7 +129,11 @@ impl SharedMemoryManager {
     pub fn delete_region(&self, name: &str) -> Result<()> {
         let mut regions = self.regions.lock().unwrap();
         if regions.remove(name).is_none() {
-            return Err(Error::Communication(format!("Region not found: {}", name)));
+            return Err(Error::Communication {
+                channel: "shared_memory_manager".to_string(),
+                reason: format!("Region not found: {}", name),
+                instance_id: None,
+            });
         }
         
         Ok(())

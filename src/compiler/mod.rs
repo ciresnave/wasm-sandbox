@@ -134,12 +134,16 @@ impl Compiler for CargoCompiler {
     ) -> Result<PathBuf> {
         // Check if cargo is available
         if !self.check_available() {
-            return Err(Error::Compilation("Cargo is not available".to_string()));
+            return Err(Error::Compilation { message: "Cargo is not available".to_string() });
         }
         
         // Create output directory if it doesn't exist
         std::fs::create_dir_all(output_path)
-            .map_err(|e| Error::FileSystem(format!("Failed to create output directory: {}", e)))?;
+            .map_err(|e| Error::Filesystem { 
+                operation: "create_dir_all".to_string(), 
+                path: output_path.to_path_buf(), 
+                reason: format!("Failed to create output directory: {}", e) 
+            })?;
         
         // Build the cargo command
         let mut cmd = Command::new("cargo");
@@ -216,12 +220,12 @@ impl Compiler for CargoCompiler {
         
         // Run the build
         let output = cmd.output()
-            .map_err(|e| Error::Compilation(format!("Failed to execute cargo: {}", e)))?;
+            .map_err(|e| Error::Compilation { message: format!("Failed to execute cargo: {}", e) })?;
         
         // Check for errors
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::Compilation(format!("Build failed: {}", stderr)));
+            return Err(Error::Compilation { message: format!("Build failed: {}", stderr) });
         }
         
         // Determine the output file path
@@ -232,8 +236,12 @@ impl Compiler for CargoCompiler {
         
         // Get the project name
         let cargo_toml_path = project_path.join("Cargo.toml");
-        let cargo_toml = std::fs::read_to_string(cargo_toml_path)
-            .map_err(|e| Error::FileSystem(format!("Failed to read Cargo.toml: {}", e)))?;
+        let cargo_toml = std::fs::read_to_string(&cargo_toml_path)
+            .map_err(|e| Error::Filesystem { 
+                operation: "read".to_string(), 
+                path: cargo_toml_path.clone(), 
+                reason: format!("Failed to read Cargo.toml: {}", e) 
+            })?;
         
         // Simple parser to extract the package name
         let package_name = cargo_toml
@@ -247,7 +255,7 @@ impl Compiler for CargoCompiler {
                     None
                 }
             })
-            .ok_or_else(|| Error::Compilation("Failed to determine package name".to_string()))?;
+            .ok_or_else(|| Error::Compilation { message: "Failed to determine package name".to_string() })?;
         
         // Construct the output file path
         let wasm_file = format!("{}.wasm", package_name);
@@ -260,7 +268,11 @@ impl Compiler for CargoCompiler {
         // Copy to the output path
         let output_wasm_path = output_path.join(format!("{}.wasm", package_name));
         std::fs::copy(&wasm_path, &output_wasm_path)
-            .map_err(|e| Error::FileSystem(format!("Failed to copy WASM file: {}", e)))?;
+            .map_err(|e| Error::Filesystem { 
+                operation: "copy".to_string(), 
+                path: wasm_path.clone(), 
+                reason: format!("Failed to copy WASM file: {}", e) 
+            })?;
         
         Ok(output_wasm_path)
     }
@@ -276,14 +288,14 @@ impl Compiler for CargoCompiler {
         let output = Command::new("cargo")
             .arg("--version")
             .output()
-            .map_err(|e| Error::Compilation(format!("Failed to get cargo version: {}", e)))?;
+            .map_err(|e| Error::Compilation { message: format!("Failed to get cargo version: {}", e) })?;
         
         if output.status.success() {
             let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
             Ok(version)
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(Error::Compilation(format!("Failed to get cargo version: {}", stderr)))
+            Err(Error::Compilation { message: format!("Failed to get cargo version: {}", stderr) })
         }
     }
 }

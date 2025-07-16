@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
     
     // Single line - compile and run
     let result: i32 = wasm_sandbox::run(wasm_path, "add", &(5, 3)).await?;
-    println!("5 + 3 = {}", result);
+    println!("5 + 3 = {result}");
     
     // Example 2: With timeout for safety
     println!("\n=== Example 2: With timeout ===");
@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
         &(10, 20),
         Duration::from_secs(5)
     ).await?;
-    println!("10 + 20 = {}", result);
+    println!("10 + 20 = {result}");
     
     // Example 3: Builder pattern for more control
     println!("\n=== Example 3: Builder pattern ===");
@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
         sandbox.call("add", &(3, 3)),
     ]).await?;
     
-    println!("Batch results: {:?}", results);
+    println!("Batch results: {results:?}");
     
     // Example 4: Convenient from_source method
     println!("\n=== Example 4: Convenient from_source ===");
@@ -62,14 +62,14 @@ async fn main() -> Result<()> {
     let result1: i32 = sandbox2.call("add", &(100, 200)).await?;
     let result2: i32 = sandbox2.call("add", &[300, 400]).await?; // Array instead of tuple
     
-    println!("Flexible parameters: {} and {}", result1, result2);
+    println!("Flexible parameters: {result1} and {result2}");
     
     // Example 5: Error handling
     println!("\n=== Example 5: Error handling ===");
     
     match wasm_sandbox::run::<(i32, i32), i32>("nonexistent.wasm", "add", &(1, 2)).await {
         Ok(_) => println!("This shouldn't happen"),
-        Err(e) => println!("Expected error: {}", e),
+        Err(e) => println!("Expected error: {e}"),
     }
     
     println!("\n=== All examples completed successfully! ===");

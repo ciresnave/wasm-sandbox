@@ -22,9 +22,9 @@ impl McpServerTemplate {
 impl TemplateRenderer for McpServerTemplate {
     fn render(&self, template_name: &str, variables: &HashMap<String, String>) -> Result<String> {
         if template_name != "mcp_server" {
-            return Err(crate::error::Error::Template(
-                format!("Unknown template: {}", template_name)
-            ));
+            return Err(crate::error::Error::Template { 
+                message: format!("Unknown template: {}", template_name) 
+            });
         }
         
         let mut result = self.template.clone();
@@ -40,9 +40,9 @@ impl TemplateRenderer for McpServerTemplate {
     
     fn register_template(&mut self, _name: &str, _template: &str) -> Result<()> {
         // For now, don't allow registration of new templates
-        Err(crate::error::Error::Template(
-            "Template registration not supported".to_string()
-        ))
+        Err(crate::error::Error::Template {
+            message: "Template registration not supported".to_string()
+        })
     }
     
     fn has_template(&self, name: &str) -> bool {

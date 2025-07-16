@@ -36,6 +36,7 @@ cargo run --example advanced_capabilities
 ### For Plugin Systems (like PUP)
 
 See [`plugin_ecosystem.rs`](plugin_ecosystem.rs) for a complete example of building a plugin system with:
+
 - Plugin validation and security scanning
 - Hot-reload capabilities
 - Resource monitoring and limits
@@ -44,6 +45,7 @@ See [`plugin_ecosystem.rs`](plugin_ecosystem.rs) for a complete example of build
 ### For File Processing
 
 See [`file_processor.rs`](file_processor.rs) for secure file processing with:
+
 - Read-only input directories
 - Write-only output directories
 - File size limits
@@ -52,6 +54,7 @@ See [`file_processor.rs`](file_processor.rs) for secure file processing with:
 ### For ML/AI Workloads
 
 See [`ml_model.rs`](ml_model.rs) for ML model execution with:
+
 - Memory limits for large models
 - GPU resource management (when available)
 - Model caching and hot-swapping

@@ -5,6 +5,7 @@ This directory contains examples showing how to use wasm-sandbox with code writt
 ## Available Languages
 
 ### ✅ Currently Supported
+
 - **[Rust](rust/)** - Native WASM support, excellent performance
 - **[C/C++](c/)** - Using Emscripten toolchain
 - **[JavaScript/TypeScript](javascript/)** - Using AssemblyScript (planned)
@@ -12,6 +13,7 @@ This directory contains examples showing how to use wasm-sandbox with code writt
 - **[Go](go/)** - Using TinyGo (planned)
 
 ### 🔄 Planned Support
+
 - **Zig** - Native WASM support
 - **C#** - Using Blazor WebAssembly
 - **Java** - Using TeaVM or similar
@@ -29,6 +31,7 @@ let result = wasm_sandbox::run("./my_code.{ext}", "function_name", &params)?;
 ## Example Structure
 
 Each language directory contains:
+
 - **Source code** - The actual program to be sandboxed
 - **Build configuration** - How to compile to WASM
 - **Usage example** - Rust code showing wasm-sandbox usage
@@ -37,18 +40,21 @@ Each language directory contains:
 ## Getting Started by Language
 
 ### If you're a Rust developer
+
 ```bash
 cd rust/calculator/
 cargo run
 ```
 
 ### If you're a C developer
+
 ```bash
 cd c/math_library/
 make run-example
 ```
 
 ### If you're a Python developer
+
 ```bash
 cd python/text_processor/
 python setup.py
@@ -56,6 +62,7 @@ cargo run
 ```
 
 ### If you're a JavaScript developer
+
 ```bash
 cd javascript/data_transformer/
 npm install

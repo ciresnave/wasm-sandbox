@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::collections::{VecDeque, HashMap};
 
 use crate::error::{Error, Result};
-use crate::communication::{CommunicationChannel, RpcChannel};
+use crate::communication::{CommunicationChannel, RpcChannel, StringHandlerFunction, ByteHandlerFunction};
 use crate::communication::memory::SharedMemoryRegion;
 use crate::utils::logging;
 
@@ -115,7 +115,11 @@ impl MemoryChannel {
             3 => Ok(ControlFlag::WritingReady),
             4 => Ok(ControlFlag::Writing),
             5 => Ok(ControlFlag::Closed),
-            _ => Err(Error::Communication("Invalid control flag".to_string())),
+            _ => Err(Error::Communication {
+                channel: "memory_channel".to_string(),
+                reason: "Invalid control flag".to_string(),
+                instance_id: None,
+            }),
         }
     }
     
@@ -138,13 +142,21 @@ impl CommunicationChannel for MemoryChannel {
     fn send_to_guest(&self, message: &[u8]) -> Result<()> {
         // Check if channel is closed
         if *self.closed.lock().unwrap() {
-            return Err(Error::Communication("Channel is closed".to_string()));
+            return Err(Error::Communication {
+                channel: "memory_channel".to_string(),
+                reason: "Channel is closed".to_string(),
+                instance_id: None,
+            });
         }
         
         // Check message queue capacity
         let mut queue = self.message_queue.lock().unwrap();
         if queue.len() >= self.capacity {
-            return Err(Error::Communication("Channel is full".to_string()));
+            return Err(Error::Communication {
+                channel: "memory_channel".to_string(),
+                reason: "Channel is full".to_string(),
+                instance_id: None,
+            });
         }
         
         // Wait for control region to be ready for writing
@@ -155,7 +167,11 @@ impl CommunicationChannel for MemoryChannel {
         }
         
         if retries >= 100 {
-            return Err(Error::Communication("Timeout waiting for channel to be ready".to_string()));
+            return Err(Error::Communication {
+                channel: "memory_channel".to_string(),
+                reason: "Timeout waiting for channel to be ready".to_string(),
+                instance_id: None,
+            });
         }
         
         // Set control flag to writing
@@ -189,7 +205,11 @@ impl CommunicationChannel for MemoryChannel {
     fn receive_from_guest(&self) -> Result<Vec<u8>> {
         // Check if channel is closed
         if *self.closed.lock().unwrap() {
-            return Err(Error::Communication("Channel is closed".to_string()));
+            return Err(Error::Communication {
+                channel: "memory_channel".to_string(),
+                reason: "Channel is closed".to_string(),
+                instance_id: None,
+            });
         }
         
         // Wait for control region to be ready for reading
@@ -200,7 +220,11 @@ impl CommunicationChannel for MemoryChannel {
         }
         
         if retries >= 100 {
-            return Err(Error::Communication("Timeout waiting for message".to_string()));
+            return Err(Error::Communication { 
+                channel: "memory_channel".to_string(), 
+                reason: "Timeout waiting for message".to_string(),
+                instance_id: None 
+            });
         }
         
         // Set control flag to reading
@@ -253,7 +277,7 @@ pub struct MemoryRpcChannel {
     channel: Arc<MemoryChannel>,
     
     /// RPC function registry
-    functions: Mutex<HashMap<String, Box<dyn Fn(&[u8]) -> Result<Vec<u8>> + Send + Sync>>>,
+    functions: Mutex<HashMap<String, ByteHandlerFunction>>,
 }
 
 impl MemoryRpcChannel {
@@ -270,7 +294,7 @@ impl RpcChannel for MemoryRpcChannel {
     fn register_host_function_json(
         &mut self,
         name: &str,
-        function: Box<dyn Fn(&str) -> Result<String> + Send + Sync + 'static>,
+        function: StringHandlerFunction,
     ) -> Result<()> {
         let name = name.to_string();
         let func = Box::new(move |data: &[u8]| -> Result<Vec<u8>> {
@@ -322,7 +346,7 @@ impl RpcChannel for MemoryRpcChannel {
     fn register_host_function_msgpack(
         &mut self,
         name: &str,
-        function: Box<dyn Fn(&[u8]) -> Result<Vec<u8>> + Send + Sync + 'static>,
+        function: ByteHandlerFunction,
     ) -> Result<()> {
         let name = name.to_string();
         

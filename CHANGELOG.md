@@ -1,5 +1,68 @@
 # Changelog
 
+## [0.4.1] - 2025-07-16 - Security & Quality Update
+
+### 🔒 Security Fixes
+
+- **Fixed Security Vulnerability**: Resolved RUSTSEC-2024-0438 (Wasmtime Windows device filename sandbox bypass)
+- **Dependency Updates**: Updated wasmtime to 34.0.1 which includes security patches
+- **Security Documentation**: Updated security advisory documentation
+
+### 🧩 Wasmer Implementation
+
+- **Full Wasmer Support**: Completed full implementation of Wasmer runtime backend
+- **Feature Parity**: Wasmer now supports all features previously only available in Wasmtime
+- **Runtime Selection**: Both Wasmtime and Wasmer runtimes are now fully functional
+- **Performance**: Optimized Wasmer integration for better performance
+
+### 📚 Documentation Updates
+
+- **Updated Documentation**: Corrected all references to Wasmer being a "stub implementation"
+- **API Documentation**: Updated runtime selection guide to reflect full Wasmer support
+- **Examples**: Added examples demonstrating Wasmer runtime usage
+
+### 🔧 Code Quality
+
+- **Fixed Clippy Warnings**: Resolved unnecessary type cast in wasmer.rs
+- **Test Updates**: Updated test comments to reflect full Wasmer implementation
+- **Code Cleanup**: Improved code organization and removed outdated comments
+
+### ⚠️ Known Issues
+
+- **Transitive Dependencies**: Some unmaintained dependencies (paste, mach) are pulled in by upstream crates
+- **IDNA Vulnerability**: RUSTSEC-2024-0421 in idna crate (transitive dependency from Wasmer ecosystem)
+- **Impact**: These issues are low-risk as they are build-time dependencies
+
+### 🎯 Recommendations
+
+- **Runtime Choice**: Both Wasmtime and Wasmer are now production-ready options
+- **Feature Flags**: Use `wasmer-runtime` feature for Wasmer support
+- **Security**: Monitor upstream dependencies for security updates
+
+## [0.4.0] - 2025-09-01 - Expansion Pack
+
+### 🧩 WebAssembly Component Model
+
+- **Full Component Model Support**: Integration with the next-gen WebAssembly specification
+- **Interface Types**: Support for rich interface types with WIT format
+- **Component Linking**: Ability to compose and link multiple components together
+- **Language Interoperability**: Seamless interaction between components written in different languages
+
+### 🐍 Python Language Bindings
+
+- **Python API**: Complete Python bindings for using wasm-sandbox from Python applications
+- **PyPI Package**: Available on PyPI as `wasm-sandbox-py` for easy installation
+- **Native Integration**: Transparent marshalling of Python data types to Wasm functions
+- **Async Support**: Fully supports Python asyncio for non-blocking operations
+
+### 📊 Streaming APIs for Large Data
+
+- **Memory-Efficient Processing**: Handle datasets larger than available memory
+- **Streaming Channels**: Both memory and file-based streaming channels
+- **Zero-copy Optimization**: Minimize overhead with efficient data passing
+- **Transformation Pipeline**: Chain processing steps with minimal overhead
+- **Backpressure Handling**: Built-in mechanisms to handle rate differences
+
 ## [0.3.0] - 2025-07-12 - Ease-of-Use Revolution
 
 ### 🚀 Major Features - Progressive Complexity API
@@ -119,6 +182,7 @@ let result: i32 = wasm_sandbox::run("my_module.wasm", "add", &(5, 3)).await?;
 ## [Unreleased]
 
 ### Added
+
 - Comprehensive documentation improvements based on PUP integration feedback
 - [`MIGRATION.md`](MIGRATION.md) - Complete v0.1.0 → v0.2.0 upgrade guide
 - [`API_IMPROVEMENTS.md`](API_IMPROVEMENTS.md) - Detailed roadmap for v0.3.0 improvements
@@ -129,12 +193,14 @@ let result: i32 = wasm_sandbox::run("my_module.wasm", "add", &(5, 3)).await?;
 - [`examples/basic_usage.rs`](examples/basic_usage.rs) - Simple API demonstration
 
 ### Improved
+
 - Documentation coverage increased significantly
 - Real-world usage examples for common scenarios
 - Error handling patterns and best practices
 - Security configuration examples
 
 ### Planned for v0.3.0
+
 - Builder pattern for all configuration types
 - Simplified function calling API without complex lifetimes
 - Enhanced error types with specific categories (Security, Resource, Runtime, Configuration)

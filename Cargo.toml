@@ -25,7 +25,7 @@ exclude = [
 
 [dependencies]
 # WebAssembly runtime
-wasmtime = { version = "34.0.1", features = ["async", "cache", "cranelift", "component-model"] }
+wasmtime = { version = "34.0.2", features = ["async", "cache", "cranelift", "component-model"] }
 wasmtime-component-macro = "34.0.1"
 wasmtime-component-util = "34.0.1"
 wit-bindgen = "0.43.0"

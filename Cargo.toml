@@ -25,17 +25,17 @@ exclude = [
 
 [dependencies]
 # WebAssembly runtime
-wasmtime = { version = "34.0.1", features = ["async", "cache", "cranelift", "component-model"] }
+wasmtime = { version = "36.0.3", features = ["async", "cache", "cranelift", "component-model"] }
 wasmtime-component-macro = "34.0.1"
 wasmtime-component-util = "34.0.1"
 wit-bindgen = "0.43.0"
 wasmer = { version = "6.0.1", features = ["sys", "cranelift"], optional = true }
 wasmer-wasix = { version = "0.600.1", optional = true }
 wasi-common = "34.0.1"
-wasmtime-wasi = "34.0.1"
+wasmtime-wasi = "38.0.4"
 
 # Security: Force minimum versions for security fixes
-idna = "1.0.3"
+idna = "1.1.0"
 
 # Async runtime
 tokio = { version = "1.32.0", features = ["full"] }
@@ -55,7 +55,7 @@ anyhow = "1.0.75"
 
 # Logging and monitoring
 tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 
 # Security
 cap-std = "3.4.4"

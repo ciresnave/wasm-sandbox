@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.2] - Unreleased - Corrected security guide, examples
+
+### Fixed
+
+- `docs/guides/security-config.md` documented an API that never existed (`NetworkCapability::Connect`/`Listen`, list-valued `Capabilities` fields, `SecurityProfile`, `TenantConfig`, builder `.capabilities()`); rewritten against the real API, with a table of which settings the runtime actually applies (only `environment` and fuel today; see #11). Closes #8.
+
+### Added
+
+- `examples/security_config.rs` and `examples/sync_plugin_call.rs` (compiled by CI). The latter shows the supported pattern for #7: a synchronous plugin export called with an awaited host call.
+
 ## [0.5.1] - Unreleased - Patent sweep record
 
 ### Added

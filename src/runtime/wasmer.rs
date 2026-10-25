@@ -2,7 +2,7 @@
 
 use std::any::Any;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use wasmer::{Engine, Instance, Memory, Module, Store, Value, imports};
 
@@ -92,7 +92,7 @@ impl WasmModule for WasmerModule {
 /// Wasmer instance implementation
 pub struct WasmerInstance {
     /// Store for the instance (with interior mutability)
-    store: RwLock<Store>,
+    store: Mutex<Store>,
 
     /// Instance
     instance: Instance,
@@ -114,7 +114,7 @@ impl WasmerInstance {
         let initial_state = WasmInstanceState::Running;
 
         Ok(Self {
-            store: RwLock::new(store),
+            store: Mutex::new(store),
             instance,
             module_id,
             state: RwLock::new(initial_state),
@@ -135,7 +135,7 @@ impl WasmInstance for WasmerInstance {
 
     fn memory_usage(&self) -> usize {
         if let Some(memory) = self.get_memory() {
-            let store = self.store.read().unwrap();
+            let store = self.store.lock().unwrap();
             let size = memory.view(&store).size();
             size.bytes().0
         } else {
@@ -164,7 +164,7 @@ impl WasmInstance for WasmerInstance {
 
     unsafe fn memory_ptr(&self) -> Result<*mut u8> {
         if let Some(memory) = self.get_memory() {
-            let store = self.store.read().unwrap();
+            let store = self.store.lock().unwrap();
             let view = memory.view(&store);
             Ok(view.data_ptr())
         } else {
@@ -198,7 +198,7 @@ impl WasmInstance for WasmerInstance {
         let wasmer_params: Vec<Value> = params.iter().map(|&p| Value::I32(p)).collect();
 
         // Call the function
-        let mut store = self.store.write().unwrap();
+        let mut store = self.store.lock().unwrap();
         let results =
             function
                 .call(&mut *store, &wasmer_params)

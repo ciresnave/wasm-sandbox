@@ -21,13 +21,13 @@ wasmtime backend (0.6.x):
 | `environment` | **Applied.** Only the variables your `EnvironmentCapability` allows are passed to the guest. |
 | `filesystem.readable_dirs` | **Applied.** Each directory is preopened read-only. |
 | `filesystem.writable_dirs` | **Applied.** Each directory is preopened read-write (create, delete and modify together). Requires `allow_create` **and** `allow_delete` to be `true` and `max_file_size` to be `None`; anything else is an `Error::Capability`. |
-| `network` | **Not supported.** Anything other than `NetworkCapability::None` makes `create_instance` fail with `Error::Capability`. Core WebAssembly modules have no socket API, so there is nothing to grant. |
+| `network` | **Components: applied** (see below). **Core modules: not supported**: anything other than `NetworkCapability::None` makes `create_instance` fail with `Error::Capability`, because core WebAssembly modules have no socket API, so there is nothing to grant. |
 | `process` | **Not supported.** Anything other than `ProcessCapability::None` is an `Error::Capability`. |
 | `time`, `random`, `custom` | Stored only; not applied. |
 | `ResourceLimits::fuel` | **Applied** (wasmtime backend): fuel is set when the instance is created. |
 
 A grant this backend cannot honour is an error, not a silent no-op, so a configuration that creates an
-instance does what it says. The wasmer backend does not apply filesystem grants yet ([#11](https://github.com/ciresnave/wasm-sandbox/issues/11)).
+instance does what it says. The Wasmer backend applies none of the network, process, environment or filesystem grants (it wires up no WASI), so it rejects every one of them with `Error::Capability`; only `Capabilities::minimal()`-style configurations create instances there.
 The other `ResourceLimits` fields exist in the type; this guide does not claim they are enforced.
 
 ## Quick start - secure defaults
@@ -43,7 +43,7 @@ let instance_id = sandbox.create_instance(module_id, None)?;
 
 `Capabilities::minimal()` is the most restrictive set: no network, no filesystem directories, no environment
 variables, no process creation, read-only time, pseudo-random only.
-`Capabilities::development()` is a looser preset (loopback network, the current directory readable, the
+`Capabilities::development()` is a looser preset (no network, the current directory readable, the
 temp directory writable, a short environment allow-list) meant for local development, not production.
 
 ## Capabilities
@@ -78,14 +78,49 @@ A single enum value:
 
 | Variant | Meaning |
 |---|---|
-| `None` | No network access (the default, and the only value the wasmtime backend accepts today). |
+| `None` | No network access (the default). |
 | `Loopback` | Localhost only. |
 | `AllowedHosts(Vec<HostSpec>)` | Specific hosts; `HostSpec { host, ports: Option<PortRange>, secure }`. |
 | `AllowedPorts(Vec<PortRange>)` | Specific ports; `PortRange::new(start, end)`. |
 | `Full` | Unrestricted. |
 
-Only `None` can be applied: with any other variant, `create_instance` returns `Error::Capability`. There is
-no separate "connect" and "listen" permission (`NetworkCapability::Connect`/`::Listen` do not exist).
+How each variant is enforced depends on the kind of module:
+
+- **Core modules (`WasmSandbox`, Wasmtime):** only `None` works. With any other variant,
+  `create_instance` returns `Error::Capability`.
+- **Components (`ComponentRuntime`, WASI preview 2):** enforced by a socket-address check that runs for
+  every address the guest uses. Everything is denied unless granted: sockets are off, and name lookups are
+  off except under `Full`.
+
+| Variant | Component guest may |
+|---|---|
+| `None` | nothing (no sockets). |
+| `Loopback` | connect to and listen on loopback addresses (`127.0.0.0/8`, `::1`). |
+| `AllowedHosts` | connect (outbound only, never listen) to the listed hosts, optionally limited to a port range. Host names are resolved **once**, when the instance is created, and the resulting addresses are the allow-list; if a name later resolves to different addresses the new ones are denied, never allowed. `secure: true` cannot be enforced at the socket level and is an `Error::Capability`. A host that does not resolve is an `Error::Capability`. |
+| `AllowedPorts` | use any address on the listed ports (connect, bind, listen). |
+| `Full` | anything, including name lookups. |
+
+Addresses are compared after normalisation, so an IPv4-mapped IPv6 form (`::ffff:a.b.c.d`) is the same
+address as `a.b.c.d` for every rule. (WASI itself also rejects IPv4-mapped IPv6 targets outright.)
+
+Run a command component and read its output:
+
+```rust
+use wasm_sandbox::runtime::component::ComponentRuntime;
+use wasm_sandbox::runtime::WasmRuntime;
+
+let runtime = ComponentRuntime::new(Capabilities::minimal(), ResourceLimits::default())?;
+let module = runtime.load_module(&component_bytes)?;
+let command = runtime.create_command_instance(module.as_ref(), capabilities)?;
+let output = command.run_command()?; // exit_code, stdout, stderr
+```
+
+WASI preview 2 reports only success or failure at exit, so `exit_code` is `0` or `1`. See
+[`tests/component_network_test.rs`](../../tests/component_network_test.rs) for a working example with a
+guest that connects to an address.
+
+There is no separate "connect" and "listen" permission (`NetworkCapability::Connect`/`::Listen` do not
+exist).
 
 ### Filesystem (`FilesystemCapability`)
 

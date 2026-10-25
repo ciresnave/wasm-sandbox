@@ -252,7 +252,9 @@ impl Capabilities {
     /// Create capabilities for development (least restrictive)
     pub fn development() -> Self {
         Self {
-            network: NetworkCapability::Loopback,
+            // No network: core modules cannot be granted any (see `NetworkCapability`), so a
+            // loopback grant here would make `create_instance` fail.
+            network: NetworkCapability::None,
             filesystem: FilesystemCapability {
                 readable_dirs: vec![std::env::current_dir().unwrap_or_default()],
                 writable_dirs: vec![std::env::temp_dir()],

@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.7.0] - Unreleased - Network enforcement for components
+
+Closes #11: network is enforced where WASI can enforce it (components); everywhere else an unenforceable
+grant is an error (core modules since 0.6.0; the Wasmer backend, documented).
+
+### Added
+
+- **`ComponentRuntime::create_instance` works** (it was `UnsupportedOperation`). It builds a WASI preview-2
+  context from the instance's capabilities: environment allow-list, filesystem preopens (same rules as
+  core modules), and a **network policy**: default deny (no sockets, no name lookups) unless the
+  capability grants it. `Loopback`, `AllowedPorts`, `AllowedHosts` (outbound only; names resolved once
+  at creation, a changed DNS answer is denied, never allowed) and `Full` are enforced by a
+  per-address check; addresses are compared after normalising IPv4-mapped IPv6 forms.
+- `ComponentRuntime::create_command_instance` and `WasiComponentInstance::run_command`, which run a
+  command component and return a `CommandOutput { exit_code, stdout, stderr }` (output capped at 64 KiB
+  each). `call_simple_function("run", &[])` on the boxed instance returns the exit code.
+- Tests: pure unit tests of the policy (`src/runtime/network_policy.rs`) and an integration test that
+  drives a committed `wasm32-wasip2` guest (`fixtures/net_guest.wasm`; source, build steps and SHA-256
+  in `fixtures/net-guest/`, digest asserted in the test).
+
+### Breaking
+
+- `HostSpec { secure: true }` and an unresolvable host name in `AllowedHosts` are `Error::Capability`
+  for components (`secure` cannot be enforced at the socket level).
+- `Capabilities::development()` no longer grants loopback network (core modules reject any network
+  grant, so the preset could not create an instance).
+
+### Fixed
+
+- `ComponentRuntime::new` failed with the default limits (it passed the memory size to wasmtime's
+  `max_wasm_stack`, which wasmtime 50 rejects); it no longer does.
+
 ## [0.6.1] - Unreleased - Patent sweep for the 0.6.0 design
 
 ### Added

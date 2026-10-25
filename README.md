@@ -47,7 +47,7 @@ let sandbox = WasmSandbox::builder()
 - **🔧 Flexible APIs**: High-level convenience APIs and low-level control for advanced use cases
 - **📦 Multiple Runtimes**: Support for Wasmtime and Wasmer WebAssembly runtimes
 - **🌐 Application Wrappers**: Built-in support for HTTP servers, MCP servers, and CLI tools
-- **📊 Resource Control**: Instruction (fuel) limits, environment-variable allow-lists and filesystem directory grants (read-only or read-write) are enforced; network and process capabilities are not supported yet (see [#11](https://github.com/ciresnave/wasm-sandbox/issues/11))
+- **📊 Resource Control**: Instruction (fuel) limits, environment-variable allow-lists, filesystem directory grants (read-only or read-write) and, for components, network allow-lists are enforced; a grant the runtime cannot honour is an error
 - **🔄 Async/Await**: Full async support for non-blocking operations
 
 ## ✨ NEW Major Additions in v0.4.0
@@ -225,10 +225,10 @@ let config = InstanceConfig {
 let instance_id = sandbox.create_instance(module_id, Some(config))?;
 ```
 
-Today the runtime applies the environment allow-list, the fuel budget and filesystem directory grants
-(`readable_dirs` read-only, `writable_dirs` read-write). `network` and `process` capabilities are **not
-supported yet**: anything other than `None` makes `create_instance` return `Error::Capability`
-([#11](https://github.com/ciresnave/wasm-sandbox/issues/11)).
+The runtime applies the environment allow-list, the fuel budget and filesystem directory grants
+(`readable_dirs` read-only, `writable_dirs` read-write). `network` is enforced for WebAssembly
+**components** (`ComponentRuntime`); for core modules, and for any `process` capability, anything other
+than `None` makes `create_instance` return `Error::Capability` instead of being silently ignored.
 See the [Security Configuration guide](docs/guides/security-config.md) and the runnable
 [`examples/security_config.rs`](examples/security_config.rs).
 

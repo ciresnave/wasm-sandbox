@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.1] - Unreleased - Patent sweep record
+
+### Added
+
+- `docs/PATENT-SWEEP.md`: due-diligence patent sweep for the 0.5.x line (13 hits read, none needing review). Not legal advice.
+
 ## [0.5.0] - Unreleased - Dependency refresh
 
 ### Breaking

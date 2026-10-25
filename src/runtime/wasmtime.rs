@@ -260,6 +260,13 @@ impl WasmInstance for WasmtimeInstance {
     }
 
     fn call_simple_function(&self, function_name: &str, params: &[i32]) -> Result<i32> {
+        // A guest that uses WASI would otherwise panic when called from a Tokio worker thread.
+        off_runtime(|| self.call_simple_function_blocking(function_name, params))
+    }
+}
+
+impl WasmtimeInstance {
+    fn call_simple_function_blocking(&self, function_name: &str, params: &[i32]) -> Result<i32> {
         let mut store_guard = self.store.lock().unwrap();
 
         // Get the function export
@@ -291,6 +298,21 @@ impl WasmInstance for WasmtimeInstance {
             }),
         }
     }
+}
+
+/// Run `f` on a thread that is not driving a Tokio runtime.
+///
+/// WASI preview 1 (`wasmtime-wasi`'s sync adapter) blocks on a runtime of its own for every call,
+/// which panics ("Cannot start a runtime from within a runtime") on a runtime worker thread. When
+/// we are on one, `f` runs on a short-lived scoped thread instead; otherwise it runs inline.
+fn off_runtime<R: Send>(f: impl FnOnce() -> R + Send) -> R {
+    if tokio::runtime::Handle::try_current().is_err() {
+        return f();
+    }
+    std::thread::scope(|scope| match scope.spawn(f).join() {
+        Ok(result) => result,
+        Err(panic) => std::panic::resume_unwind(panic),
+    })
 }
 
 /// A directory to preopen for the guest, with the permissions it was granted.
@@ -456,66 +478,8 @@ impl WasmtimeRuntime {
     }
 }
 
-impl WasmRuntime for WasmtimeRuntime {
-    fn initialize(&mut self, config: RuntimeConfig) -> Result<()> {
-        // Update configuration
-        self.config = config;
-
-        Ok(())
-    }
-
-    fn load_module(&self, wasm_bytes: &[u8]) -> Result<Box<dyn WasmModule>> {
-        // Compile the module
-        let start_time = std::time::Instant::now();
-
-        let module = Module::new(&self.engine, wasm_bytes)
-            .map_err(|e| Error::module_load_error(format!("Failed to compile module: {}", e)))?;
-
-        let elapsed_ms = start_time.elapsed().as_millis() as u64;
-
-        // Update metrics
-        {
-            let mut metrics = self.metrics.lock().unwrap();
-            metrics.compiled_modules += 1;
-            metrics.last_compilation_time_ms = Some(elapsed_ms);
-        }
-
-        // Create the module
-        let module = Arc::new(WasmtimeModule::new(module, wasm_bytes));
-        let id = module.id();
-
-        // Store in the modules map
-        self.modules.insert(id, module.clone());
-
-        Ok(Box::new(WasmtimeModule {
-            id,
-            name: module.name.clone(),
-            module: module.module.clone(),
-            exports: module.exports.clone(),
-            size: module.size,
-        }))
-    }
-
-    fn get_module(&self, id: ModuleId) -> Result<Arc<dyn WasmModule>> {
-        // Get the module
-        let module = self
-            .modules
-            .get(&id)
-            .ok_or_else(|| Error::config_error(format!("Module not found: {}", id), None))?;
-
-        // Return as Arc<dyn WasmModule>
-        let clone: Box<dyn WasmModule> = Box::new(WasmtimeModule {
-            id: module.id,
-            name: module.name.clone(),
-            module: module.module.clone(),
-            exports: module.exports.clone(),
-            size: module.size,
-        });
-
-        Ok(Arc::from(clone))
-    }
-
-    fn create_instance(
+impl WasmtimeRuntime {
+    fn create_instance_inner(
         &self,
         module: &dyn WasmModule,
         resources: ResourceLimits,
@@ -655,6 +619,76 @@ impl WasmRuntime for WasmtimeRuntime {
         }
 
         Ok(Box::new(instance) as Box<dyn WasmInstance>)
+    }
+}
+
+impl WasmRuntime for WasmtimeRuntime {
+    fn initialize(&mut self, config: RuntimeConfig) -> Result<()> {
+        // Update configuration
+        self.config = config;
+
+        Ok(())
+    }
+
+    fn load_module(&self, wasm_bytes: &[u8]) -> Result<Box<dyn WasmModule>> {
+        // Compile the module
+        let start_time = std::time::Instant::now();
+
+        let module = Module::new(&self.engine, wasm_bytes)
+            .map_err(|e| Error::module_load_error(format!("Failed to compile module: {}", e)))?;
+
+        let elapsed_ms = start_time.elapsed().as_millis() as u64;
+
+        // Update metrics
+        {
+            let mut metrics = self.metrics.lock().unwrap();
+            metrics.compiled_modules += 1;
+            metrics.last_compilation_time_ms = Some(elapsed_ms);
+        }
+
+        // Create the module
+        let module = Arc::new(WasmtimeModule::new(module, wasm_bytes));
+        let id = module.id();
+
+        // Store in the modules map
+        self.modules.insert(id, module.clone());
+
+        Ok(Box::new(WasmtimeModule {
+            id,
+            name: module.name.clone(),
+            module: module.module.clone(),
+            exports: module.exports.clone(),
+            size: module.size,
+        }))
+    }
+
+    fn get_module(&self, id: ModuleId) -> Result<Arc<dyn WasmModule>> {
+        // Get the module
+        let module = self
+            .modules
+            .get(&id)
+            .ok_or_else(|| Error::config_error(format!("Module not found: {}", id), None))?;
+
+        // Return as Arc<dyn WasmModule>
+        let clone: Box<dyn WasmModule> = Box::new(WasmtimeModule {
+            id: module.id,
+            name: module.name.clone(),
+            module: module.module.clone(),
+            exports: module.exports.clone(),
+            size: module.size,
+        });
+
+        Ok(Arc::from(clone))
+    }
+
+    fn create_instance(
+        &self,
+        module: &dyn WasmModule,
+        resources: ResourceLimits,
+        capabilities: Capabilities,
+    ) -> Result<Box<dyn WasmInstance>> {
+        // WASI preview 1 blocks on its own runtime, which panics on a Tokio worker thread.
+        off_runtime(|| self.create_instance_inner(module, resources, capabilities))
     }
 
     fn get_metrics(&self) -> RuntimeMetrics {

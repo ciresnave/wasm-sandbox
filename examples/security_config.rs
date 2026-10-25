@@ -4,30 +4,28 @@
 //! Run with: `cargo run --example security_config`
 
 use wasm_sandbox::security::audit::{AuditEventType, AuditLogger};
-use wasm_sandbox::security::{
-    Capabilities, FilesystemCapability, HostSpec, NetworkCapability, PortRange, ResourceLimits,
-};
+use wasm_sandbox::security::{Capabilities, FilesystemCapability, ResourceLimits};
 use wasm_sandbox::{CpuLimits, EnvironmentCapability, InstanceConfig, Result, WasmSandbox};
 
 const TEST_MODULE: &[u8] = include_bytes!("../fixtures/test_module.wasm");
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Start from nothing and grant only what is needed.
+    // The granted directories must exist.
+    std::fs::create_dir_all("./test_input")?;
+    std::fs::create_dir_all("./test_output")?;
+
+    // Start from nothing and grant only what is needed. Network and process grants are not
+    // supported by the Wasmtime backend: anything but `None` fails at `create_instance`.
     let capabilities = Capabilities {
-        // One enum value, not a list: choose None, Loopback, AllowedHosts, AllowedPorts or Full.
-        network: NetworkCapability::AllowedHosts(vec![HostSpec {
-            host: "api.example.com".to_string(),
-            ports: Some(PortRange::new(443, 443)),
-            secure: true,
-        }]),
         // Directory lists live inside a single struct.
         filesystem: FilesystemCapability {
             readable_dirs: vec!["./test_input".into()],
             writable_dirs: vec!["./test_output".into()],
-            max_file_size: Some(10 * 1024 * 1024),
+            // Writable directories need both flags and cannot cap file size.
+            max_file_size: None,
             allow_create: true,
-            allow_delete: false,
+            allow_delete: true,
         },
         environment: EnvironmentCapability::Allowlist(vec!["API_KEY".to_string()]),
         ..Capabilities::minimal()

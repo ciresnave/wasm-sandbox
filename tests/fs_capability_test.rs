@@ -217,3 +217,38 @@ fn unsupported_or_unsatisfiable_grants_are_loud_errors() {
         "missing dir: {r:?}"
     );
 }
+
+/// `enable_file_access(true)` is a read-only grant of the current directory: the guest can see it
+/// as a preopen but cannot create files in it.
+#[tokio::test]
+async fn builder_file_access_is_read_only() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let module = dir.path().join("probe.wasm");
+    fs::write(&module, GUEST).unwrap(); // wasmtime accepts WAT text
+
+    let sandbox = WasmSandbox::builder()
+        .source(module.to_str().unwrap())
+        .enable_file_access(true)
+        .build()
+        .await
+        .expect("build");
+    let id = sandbox.instance_ids()[0];
+
+    let cwd_marker = std::env::current_dir().unwrap().join("new.txt");
+    assert!(
+        !cwd_marker.exists(),
+        "precondition: no stray new.txt in the cwd"
+    );
+
+    assert_eq!(
+        call(&sandbox, id, "prestat", 3),
+        WASI_ERRNO_SUCCESS,
+        "cwd is preopened"
+    );
+    assert_ne!(
+        call(&sandbox, id, "create", 3),
+        WASI_ERRNO_SUCCESS,
+        "cwd must not be writable"
+    );
+    assert!(!cwd_marker.exists(), "guest created a file in the cwd");
+}

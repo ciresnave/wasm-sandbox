@@ -1,9 +1,9 @@
 //! Resource monitoring and usage tracking
 
-use std::time::{Duration, Instant};
-use serde::{Serialize, Deserialize};
-use crate::error::ResourceKind;
 use crate::InstanceId;
+use crate::error::ResourceKind;
+use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
 
 /// Detailed resource usage information with timeline
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,11 +165,13 @@ impl ResourceMonitor {
                 .as_millis() as u64,
             memory_bytes: self.memory_usage.current_bytes,
             cpu_time_ms: self.cpu_usage.time_spent.as_millis() as u64,
-            active_handles: (self.io_usage.files_opened - self.io_usage.bytes_written.min(self.io_usage.files_opened)) as u32,
+            active_handles: (self.io_usage.files_opened
+                - self.io_usage.bytes_written.min(self.io_usage.files_opened))
+                as u32,
         };
-        
+
         self.snapshots.push(snapshot);
-        
+
         // Keep only last 100 snapshots to prevent memory growth
         if self.snapshots.len() > 100 {
             self.snapshots.remove(0);
@@ -202,43 +204,58 @@ impl ResourceMonitor {
             ResourceKind::Memory => {
                 let used = self.memory_usage.current_bytes as u64;
                 if used > limit {
-                    Some((used, format!("Memory usage {} bytes exceeds limit {} bytes", used, limit)))
+                    Some((
+                        used,
+                        format!("Memory usage {} bytes exceeds limit {} bytes", used, limit),
+                    ))
                 } else {
                     None
                 }
-            },
+            }
             ResourceKind::CpuTime => {
                 let used = self.cpu_usage.time_spent.as_millis() as u64;
                 if used > limit {
-                    Some((used, format!("CPU time {} ms exceeds limit {} ms", used, limit)))
+                    Some((
+                        used,
+                        format!("CPU time {} ms exceeds limit {} ms", used, limit),
+                    ))
                 } else {
                     None
                 }
-            },
+            }
             ResourceKind::ExecutionTime => {
                 let used = Instant::now().duration_since(self.start_time).as_millis() as u64;
                 if used > limit {
-                    Some((used, format!("Execution time {} ms exceeds limit {} ms", used, limit)))
+                    Some((
+                        used,
+                        format!("Execution time {} ms exceeds limit {} ms", used, limit),
+                    ))
                 } else {
                     None
                 }
-            },
+            }
             ResourceKind::FileHandles => {
                 let used = self.io_usage.files_opened;
                 if used > limit {
-                    Some((used, format!("File handles {} exceeds limit {}", used, limit)))
+                    Some((
+                        used,
+                        format!("File handles {} exceeds limit {}", used, limit),
+                    ))
                 } else {
                     None
                 }
-            },
+            }
             ResourceKind::NetworkConnections => {
                 let used = self.io_usage.network_requests;
                 if used > limit {
-                    Some((used, format!("Network requests {} exceeds limit {}", used, limit)))
+                    Some((
+                        used,
+                        format!("Network requests {} exceeds limit {}", used, limit),
+                    ))
                 } else {
                     None
                 }
-            },
+            }
             _ => None,
         }
     }
@@ -248,16 +265,18 @@ impl ResourceMonitor {
         if limit == 0 {
             return 0.0;
         }
-        
+
         let used = match kind {
             ResourceKind::Memory => self.memory_usage.current_bytes as u64,
             ResourceKind::CpuTime => self.cpu_usage.time_spent.as_millis() as u64,
-            ResourceKind::ExecutionTime => Instant::now().duration_since(self.start_time).as_millis() as u64,
+            ResourceKind::ExecutionTime => {
+                Instant::now().duration_since(self.start_time).as_millis() as u64
+            }
             ResourceKind::FileHandles => self.io_usage.files_opened,
             ResourceKind::NetworkConnections => self.io_usage.network_requests,
             _ => 0,
         };
-        
+
         (used as f64 / limit as f64 * 100.0).min(100.0)
     }
 

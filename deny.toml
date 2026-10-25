@@ -1,0 +1,37 @@
+# cargo-deny configuration. Read the job log: an advisory acknowledgement is the PM's call at gate.
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    # webpki-roots (Mozilla's CA bundle as data), pulled by sqlx's `tls-rustls-ring-webpki`; a
+    # permissive data licence. Allowed here at 0.4.28; the PM may prefer `native-roots` instead.
+    "CDLA-Permissive-2.0",
+    # Transitive via wasmer / wasmer-wasix (colored, cooked-waker; enum-iterator, managed, smoltcp;
+    # xxhash-rust). MPL-2.0 is file-level copyleft; we do not modify those crates.
+    "MPL-2.0",
+    "0BSD",
+    "BSL-1.0",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -1,21 +1,21 @@
 //! Simplified one-liner APIs for common use cases
 
-use std::path::Path;
-use serde_json::Value;
 use crate::error::Result;
-use crate::{WasmSandbox, InstanceConfig};
+use crate::{InstanceConfig, WasmSandbox};
+use serde_json::Value;
+use std::path::Path;
 
 /// One-liner execution functions for maximum ease of use
 pub struct SimpleSandbox;
 
 impl SimpleSandbox {
     /// Execute a single function with minimal setup - the simplest possible API
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust,no_run
     /// use wasm_sandbox::simple;
-    /// 
+    ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), wasm_sandbox::SandboxError> {
     ///     // Execute a function from a Rust source file
@@ -26,32 +26,28 @@ impl SimpleSandbox {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn run<T, P>(
-        source_path: P,
-        function_name: &str,
-        args: &[Value],
-    ) -> Result<T>
+    pub async fn run<T, P>(source_path: P, function_name: &str, args: &[Value]) -> Result<T>
     where
         T: serde::de::DeserializeOwned + 'static,
         P: AsRef<Path>,
     {
         // Use secure defaults
         let config = InstanceConfig::builder()
-            .memory_limit(crate::config::MemoryUnit::mb(64))  // 64MB default
-            .timeout(30u64)    // 30 second timeout
-            .network_deny_all()                               // No network by default
+            .memory_limit(crate::config::MemoryUnit::mb(64)) // 64MB default
+            .timeout(30u64) // 30 second timeout
+            .network_deny_all() // No network by default
             .build()?;
 
         Self::run_with_config(source_path, function_name, args, config).await
     }
 
     /// Execute with custom configuration but still simple
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust,no_run
     /// use wasm_sandbox::{simple, InstanceConfig, MemoryUnit};
-    /// 
+    ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), wasm_sandbox::SandboxError> {
     ///     let config = InstanceConfig::builder()
@@ -61,8 +57,8 @@ impl SimpleSandbox {
     ///         .build()?;
     ///     
     ///     let result: Vec<String> = simple::run_with_config(
-    ///         "./data_processor.rs", 
-    ///         "process_files", 
+    ///         "./data_processor.rs",
+    ///         "process_files",
     ///         &["/data/input.txt".into()],
     ///         config
     ///     ).await?;
@@ -81,29 +77,33 @@ impl SimpleSandbox {
     {
         // Create sandbox and execute
         let mut sandbox = WasmSandbox::new()?;
-        let wasm_bytes = crate::compile_source_to_wasm(
-            source_path.as_ref().to_str().ok_or_else(|| crate::Error::InvalidInput {
-                field: "source_path".to_string(),
-                reason: "Path contains invalid UTF-8 characters".to_string(),
-                suggestion: Some("Use a path with valid UTF-8 characters".to_string()),
-            })?
-        ).await?;
+        let wasm_bytes =
+            crate::compile_source_to_wasm(source_path.as_ref().to_str().ok_or_else(|| {
+                crate::Error::InvalidInput {
+                    field: "source_path".to_string(),
+                    reason: "Path contains invalid UTF-8 characters".to_string(),
+                    suggestion: Some("Use a path with valid UTF-8 characters".to_string()),
+                }
+            })?)
+            .await?;
         let module_id = sandbox.load_module(&wasm_bytes)?;
         let instance_id = sandbox.create_instance(module_id, Some(config))?;
-        
-        let result: Value = sandbox.call_function(instance_id, function_name, args.to_vec()).await?;
+
+        let result: Value = sandbox
+            .call_function(instance_id, function_name, args.to_vec())
+            .await?;
         let deserialized = serde_json::from_value(result)?;
         Ok(deserialized)
     }
 
     /// Execute multiple functions in sequence with the same instance
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust,no_run
     /// use wasm_sandbox::simple;
     /// use serde_json::json;
-    /// 
+    ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), wasm_sandbox::SandboxError> {
     ///     let calls = vec![
@@ -130,7 +130,15 @@ impl SimpleSandbox {
             .network_deny_all()
             .build()?;
 
-        Self::run_sequence_with_config(source_path, function_calls.iter().map(|(name, args)| (name.to_string(), args.clone())).collect(), config).await
+        Self::run_sequence_with_config(
+            source_path,
+            function_calls
+                .iter()
+                .map(|(name, args)| (name.to_string(), args.clone()))
+                .collect(),
+            config,
+        )
+        .await
     }
 
     /// Execute multiple functions with custom configuration
@@ -143,32 +151,36 @@ impl SimpleSandbox {
         P: AsRef<Path>,
     {
         let mut sandbox = WasmSandbox::new()?;
-        let wasm_bytes = crate::compile_source_to_wasm(
-            source_path.as_ref().to_str().ok_or_else(|| crate::Error::InvalidInput {
-                field: "source_path".to_string(),
-                reason: "Path contains invalid UTF-8 characters".to_string(),
-                suggestion: Some("Use a path with valid UTF-8 characters".to_string()),
-            })?
-        ).await?;
+        let wasm_bytes =
+            crate::compile_source_to_wasm(source_path.as_ref().to_str().ok_or_else(|| {
+                crate::Error::InvalidInput {
+                    field: "source_path".to_string(),
+                    reason: "Path contains invalid UTF-8 characters".to_string(),
+                    suggestion: Some("Use a path with valid UTF-8 characters".to_string()),
+                }
+            })?)
+            .await?;
         let module_id = sandbox.load_module(&wasm_bytes)?;
         let instance_id = sandbox.create_instance(module_id, Some(config))?;
-        
+
         let mut results = Vec::new();
         for (function_name, args) in function_calls {
-            let result: Value = sandbox.call_function(instance_id, &function_name, args).await?;
+            let result: Value = sandbox
+                .call_function(instance_id, &function_name, args)
+                .await?;
             results.push(result);
         }
-        
+
         Ok(results)
     }
 
     /// Create a reusable sandbox instance for multiple operations
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust,no_run
     /// use wasm_sandbox::simple;
-    /// 
+    ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), wasm_sandbox::SandboxError> {
     ///     // Create a reusable sandbox
@@ -202,16 +214,18 @@ impl SimpleSandbox {
         P: AsRef<Path>,
     {
         let mut sandbox = WasmSandbox::new()?;
-        let wasm_bytes = crate::compile_source_to_wasm(
-            source_path.as_ref().to_str().ok_or_else(|| crate::Error::InvalidInput {
-                field: "source_path".to_string(),
-                reason: "Path contains invalid UTF-8 characters".to_string(),
-                suggestion: Some("Use a path with valid UTF-8 characters".to_string()),
-            })?
-        ).await?;
+        let wasm_bytes =
+            crate::compile_source_to_wasm(source_path.as_ref().to_str().ok_or_else(|| {
+                crate::Error::InvalidInput {
+                    field: "source_path".to_string(),
+                    reason: "Path contains invalid UTF-8 characters".to_string(),
+                    suggestion: Some("Use a path with valid UTF-8 characters".to_string()),
+                }
+            })?)
+            .await?;
         let module_id = sandbox.load_module(&wasm_bytes)?;
         let instance_id = sandbox.create_instance(module_id, Some(config))?;
-        
+
         Ok(ReusableSandbox {
             sandbox,
             instance_id,
@@ -231,7 +245,9 @@ impl ReusableSandbox {
     where
         T: serde::de::DeserializeOwned + 'static,
     {
-        self.sandbox.call_function(self.instance_id, &function_name, args).await
+        self.sandbox
+            .call_function(self.instance_id, &function_name, args)
+            .await
     }
 
     /// Get resource usage for this instance
@@ -249,9 +265,9 @@ impl ReusableSandbox {
 pub use SimpleSandbox as simple;
 
 /// Top-level convenience function for the absolute simplest usage
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```rust,no_run
 /// #[tokio::main]
 /// async fn main() -> Result<(), wasm_sandbox::SandboxError> {
@@ -260,11 +276,7 @@ pub use SimpleSandbox as simple;
 ///     Ok(())
 /// }
 /// ```
-pub async fn run<T, P>(
-    source_path: P,
-    function_name: &str,
-    args: &[Value],
-) -> Result<T>
+pub async fn run<T, P>(source_path: P, function_name: &str, args: &[Value]) -> Result<T>
 where
     T: serde::de::DeserializeOwned + 'static,
     P: AsRef<Path>,
@@ -273,9 +285,9 @@ where
 }
 
 /// Top-level function to create a reusable sandbox
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```rust,no_run
 /// #[tokio::main]
 /// async fn main() -> Result<(), wasm_sandbox::SandboxError> {

@@ -1,30 +1,30 @@
 //! WASI-specific compiler options and tools for WebAssembly
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::collections::HashMap;
 
-use crate::error::{Error, Result};
 use super::{Compiler, CompilerOptions};
+use crate::error::{Error, Result};
 
 /// WASI target configuration
 #[derive(Debug, Clone)]
 pub struct WasiConfig {
     /// WASI version
     pub version: String,
-    
+
     /// Additional WASI features to enable
     pub features: Vec<String>,
-    
+
     /// Mapped directories (host path -> guest path)
     pub mapped_dirs: HashMap<PathBuf, String>,
-    
+
     /// Environment variables to pass to the WASI module
     pub env_vars: HashMap<String, String>,
-    
+
     /// Arguments to pass to the WASI module
     pub args: Vec<String>,
-    
+
     /// Preopened directories
     pub preopens: Vec<String>,
 }
@@ -46,7 +46,7 @@ impl Default for WasiConfig {
 pub struct WasiCompiler<C: Compiler> {
     /// Inner compiler
     inner: C,
-    
+
     /// WASI configuration
     wasi_config: WasiConfig,
 }
@@ -59,79 +59,95 @@ impl<C: Compiler> WasiCompiler<C> {
             wasi_config: WasiConfig::default(),
         }
     }
-    
+
     /// Set the WASI configuration
     pub fn with_wasi_config(mut self, config: WasiConfig) -> Self {
         self.wasi_config = config;
         self
     }
-    
+
     /// Map a directory from host to guest
-    pub fn map_directory(mut self, host_path: impl Into<PathBuf>, guest_path: impl Into<String>) -> Self {
-        self.wasi_config.mapped_dirs.insert(host_path.into(), guest_path.into());
+    pub fn map_directory(
+        mut self,
+        host_path: impl Into<PathBuf>,
+        guest_path: impl Into<String>,
+    ) -> Self {
+        self.wasi_config
+            .mapped_dirs
+            .insert(host_path.into(), guest_path.into());
         self
     }
-    
+
     /// Add an environment variable
     pub fn with_env_var(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.wasi_config.env_vars.insert(key.into(), value.into());
         self
     }
-    
+
     /// Add a command-line argument
     pub fn with_arg(mut self, arg: impl Into<String>) -> Self {
         self.wasi_config.args.push(arg.into());
         self
     }
-    
+
     /// Add a preopen directory
     pub fn with_preopen(mut self, dir: impl Into<String>) -> Self {
         self.wasi_config.preopens.push(dir.into());
         self
     }
-    
+
     /// Generate a WASI-specific wrapper file for the WASM module
-    fn generate_wasi_wrapper(&self, wasm_path: &Path, _options: &CompilerOptions) -> Result<PathBuf> {
+    fn generate_wasi_wrapper(
+        &self,
+        wasm_path: &Path,
+        _options: &CompilerOptions,
+    ) -> Result<PathBuf> {
         // Create a wrapper directory next to the WASM file
-        let parent = wasm_path.parent().ok_or_else(|| {
-            Error::Filesystem { 
-                operation: "get_parent".to_string(), 
-                path: wasm_path.to_path_buf(), 
-                reason: "Invalid WASM path, no parent directory".to_string() 
-            }
+        let parent = wasm_path.parent().ok_or_else(|| Error::Filesystem {
+            operation: "get_parent".to_string(),
+            path: wasm_path.to_path_buf(),
+            reason: "Invalid WASM path, no parent directory".to_string(),
         })?;
-        
+
         let wrapper_dir = parent.join("wasi_wrapper");
-        std::fs::create_dir_all(&wrapper_dir)
-            .map_err(|e| Error::Filesystem { 
-                operation: "create_dir_all".to_string(), 
-                path: wrapper_dir.clone(), 
-                reason: format!("Failed to create wrapper directory: {}", e) 
-            })?;
-            
+        std::fs::create_dir_all(&wrapper_dir).map_err(|e| Error::Filesystem {
+            operation: "create_dir_all".to_string(),
+            path: wrapper_dir.clone(),
+            reason: format!("Failed to create wrapper directory: {}", e),
+        })?;
+
         // Generate a wrapper.js file that configures WASI
         let wrapper_path = wrapper_dir.join("wrapper.js");
-        
+
         // Generate environment variables JSON
-        let env_vars = serde_json::to_string(&self.wasi_config.env_vars)
-            .map_err(|e| Error::Generic { message: format!("Failed to serialize environment variables: {}", e) })?;
-        
+        let env_vars =
+            serde_json::to_string(&self.wasi_config.env_vars).map_err(|e| Error::Generic {
+                message: format!("Failed to serialize environment variables: {}", e),
+            })?;
+
         // Generate mapped directories JSON
-        let mapped_dirs: HashMap<String, String> = self.wasi_config.mapped_dirs.iter()
+        let mapped_dirs: HashMap<String, String> = self
+            .wasi_config
+            .mapped_dirs
+            .iter()
             .map(|(host, guest)| (guest.clone(), host.to_string_lossy().to_string()))
             .collect();
-            
-        let mapped_dirs = serde_json::to_string(&mapped_dirs)
-            .map_err(|e| Error::Generic { message: format!("Failed to serialize mapped directories: {}", e) })?;
-            
+
+        let mapped_dirs = serde_json::to_string(&mapped_dirs).map_err(|e| Error::Generic {
+            message: format!("Failed to serialize mapped directories: {}", e),
+        })?;
+
         // Generate arguments JSON
-        let args = serde_json::to_string(&self.wasi_config.args)
-            .map_err(|e| Error::Generic { message: format!("Failed to serialize arguments: {}", e) })?;
-            
+        let args = serde_json::to_string(&self.wasi_config.args).map_err(|e| Error::Generic {
+            message: format!("Failed to serialize arguments: {}", e),
+        })?;
+
         // Generate preopens JSON
-        let preopens = serde_json::to_string(&self.wasi_config.preopens)
-            .map_err(|e| Error::Generic { message: format!("Failed to serialize preopens: {}", e) })?;
-            
+        let preopens =
+            serde_json::to_string(&self.wasi_config.preopens).map_err(|e| Error::Generic {
+                message: format!("Failed to serialize preopens: {}", e),
+            })?;
+
         // Create wrapper content
         let wrapper_content = format!(
             r#"// WASI wrapper for {wasm_name}
@@ -180,36 +196,38 @@ run();
             preopens = preopens,
             mapped_dirs = mapped_dirs,
         );
-        
+
         // Write the wrapper file
-        std::fs::write(&wrapper_path, wrapper_content)
-            .map_err(|e| Error::Filesystem { 
-                operation: "write".to_string(), 
-                path: wrapper_path.clone(), 
-                reason: format!("Failed to write wrapper file: {}", e) 
-            })?;
-            
+        std::fs::write(&wrapper_path, wrapper_content).map_err(|e| Error::Filesystem {
+            operation: "write".to_string(),
+            path: wrapper_path.clone(),
+            reason: format!("Failed to write wrapper file: {}", e),
+        })?;
+
         Ok(wrapper_path)
     }
-    
+
     /// Generate a WASI configuration file for runtime use
     fn generate_wasi_config_file(&self, wasm_path: &Path) -> Result<PathBuf> {
-        let parent = wasm_path.parent().ok_or_else(|| {
-            Error::Filesystem { 
-                operation: "get_parent".to_string(), 
-                path: wasm_path.to_path_buf(), 
-                reason: "Invalid WASM path, no parent directory".to_string() 
-            }
+        let parent = wasm_path.parent().ok_or_else(|| Error::Filesystem {
+            operation: "get_parent".to_string(),
+            path: wasm_path.to_path_buf(),
+            reason: "Invalid WASM path, no parent directory".to_string(),
         })?;
-        
-        let config_path = parent.join(format!("{}.wasi.json", 
-            wasm_path.file_stem().unwrap().to_string_lossy()));
-            
+
+        let config_path = parent.join(format!(
+            "{}.wasi.json",
+            wasm_path.file_stem().unwrap().to_string_lossy()
+        ));
+
         // Convert mapped directories to strings
-        let mapped_dirs: HashMap<String, String> = self.wasi_config.mapped_dirs.iter()
+        let mapped_dirs: HashMap<String, String> = self
+            .wasi_config
+            .mapped_dirs
+            .iter()
             .map(|(host, guest)| (guest.clone(), host.to_string_lossy().to_string()))
             .collect();
-            
+
         // Create a serializable config
         let mut config = std::collections::HashMap::new();
         config.insert("version", self.wasi_config.version.clone());
@@ -218,7 +236,7 @@ run();
         config.insert("env", format!("{:?}", self.wasi_config.env_vars));
         config.insert("args", format!("{:?}", self.wasi_config.args));
         config.insert("preopens", format!("{:?}", self.wasi_config.preopens));
-        
+
         // Write the config file
         // Simple formatted output
         let mut config_str = String::from("{\n");
@@ -226,14 +244,13 @@ run();
             config_str.push_str(&format!("  \"{}\": {},\n", key, value));
         }
         config_str.push_str("}");
-            
-        std::fs::write(&config_path, config_str)
-            .map_err(|e| Error::Filesystem { 
-                operation: "write".to_string(), 
-                path: config_path.clone(), 
-                reason: format!("Failed to write WASI config file: {}", e) 
-            })?;
-            
+
+        std::fs::write(&config_path, config_str).map_err(|e| Error::Filesystem {
+            operation: "write".to_string(),
+            path: config_path.clone(),
+            reason: format!("Failed to write WASI config file: {}", e),
+        })?;
+
         Ok(config_path)
     }
 }
@@ -247,28 +264,28 @@ impl<C: Compiler> Compiler for WasiCompiler<C> {
     ) -> Result<PathBuf> {
         // First, compile with the inner compiler
         let wasm_path = self.inner.compile(project_path, output_path, options)?;
-        
+
         // Generate a WASI wrapper
         let _wrapper_path = self.generate_wasi_wrapper(&wasm_path, options)?;
-        
+
         // Generate a WASI configuration file
         let _config_path = self.generate_wasi_config_file(&wasm_path)?;
-        
+
         // Return the original WASM path
         Ok(wasm_path)
     }
-    
+
     fn check_available(&self) -> bool {
         // Check if both the inner compiler and wasm32-wasi target are available
         if !self.inner.check_available() {
             return false;
         }
-        
+
         // Check if wasm32-wasi target is installed
         let output = Command::new("rustc")
             .args(["--print", "target-list"])
             .output();
-            
+
         match output {
             Ok(output) if output.status.success() => {
                 let targets = String::from_utf8_lossy(&output.stdout);
@@ -277,12 +294,15 @@ impl<C: Compiler> Compiler for WasiCompiler<C> {
             _ => false,
         }
     }
-    
+
     fn version(&self) -> Result<String> {
         // Combine the inner compiler version with WASI info
         let inner_version = self.inner.version()?;
-        
-        Ok(format!("{} with WASI {}", inner_version, self.wasi_config.version))
+
+        Ok(format!(
+            "{} with WASI {}",
+            inner_version, self.wasi_config.version
+        ))
     }
 }
 
@@ -292,28 +312,32 @@ pub fn ensure_wasi_target() -> Result<()> {
     let output = Command::new("rustc")
         .args(["--print", "target-list"])
         .output()
-        .map_err(|e| Error::Compilation { message: format!("Failed to execute rustc: {}", e) })?;
-        
+        .map_err(|e| Error::Compilation {
+            message: format!("Failed to execute rustc: {}", e),
+        })?;
+
     if output.status.success() {
         let targets = String::from_utf8_lossy(&output.stdout);
         if targets.contains("wasm32-wasi") {
             return Ok(());
         }
     }
-    
+
     // Target not installed, install it
     let output = Command::new("rustup")
         .args(["target", "add", "wasm32-wasi"])
         .output()
-        .map_err(|e| Error::Compilation { message: format!("Failed to execute rustup: {}", e) })?;
-        
+        .map_err(|e| Error::Compilation {
+            message: format!("Failed to execute rustup: {}", e),
+        })?;
+
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(Error::Compilation { message: format!(
-            "Failed to install wasm32-wasi target: {}", stderr
-        ) });
+        return Err(Error::Compilation {
+            message: format!("Failed to install wasm32-wasi target: {}", stderr),
+        });
     }
-    
+
     Ok(())
 }
 
@@ -322,59 +346,70 @@ pub fn check_wasi_compatibility(project_path: &Path) -> Result<bool> {
     // Check if Cargo.toml exists
     let cargo_toml_path = project_path.join("Cargo.toml");
     if !cargo_toml_path.exists() {
-        return Err(Error::Filesystem { 
+        return Err(Error::Filesystem {
             operation: "find".to_string(),
             path: cargo_toml_path.clone(),
-            reason: "Cargo.toml not found".to_string()
+            reason: "Cargo.toml not found".to_string(),
         });
     }
-    
+
     // Just check that we can read Cargo.toml
-    std::fs::read_to_string(&cargo_toml_path)
-        .map_err(|e| Error::Filesystem { 
-            operation: "read".to_string(),
-            path: cargo_toml_path.clone(),
-            reason: e.to_string()
-        })?;
-        
+    std::fs::read_to_string(&cargo_toml_path).map_err(|e| Error::Filesystem {
+        operation: "read".to_string(),
+        path: cargo_toml_path.clone(),
+        reason: e.to_string(),
+    })?;
+
     // Look for potentially incompatible dependencies
     let incompatible_deps = [
-        "std::fs::File", "std::net::TcpStream", "std::process::Command",
-        "tokio::fs::File", "tokio::net::TcpStream", "tokio::process::Command",
-        "async_std::fs::File", "async_std::net::TcpStream", "async_std::process::Command",
+        "std::fs::File",
+        "std::net::TcpStream",
+        "std::process::Command",
+        "tokio::fs::File",
+        "tokio::net::TcpStream",
+        "tokio::process::Command",
+        "async_std::fs::File",
+        "async_std::net::TcpStream",
+        "async_std::process::Command",
     ];
-    
+
     // Check all .rs files in src directory
     let src_dir = project_path.join("src");
     if !src_dir.exists() || !src_dir.is_dir() {
-        return Err(Error::Filesystem { 
+        return Err(Error::Filesystem {
             operation: "find".to_string(),
             path: src_dir.clone(),
-            reason: "src directory not found".to_string()
+            reason: "src directory not found".to_string(),
         });
     }
-    
+
     let mut compatible = true;
     let mut check_file = |file_path: &Path| -> std::io::Result<()> {
         if !file_path.extension().map_or(false, |ext| ext == "rs") {
             return Ok(());
         }
-        
+
         let content = std::fs::read_to_string(file_path)?;
-        
+
         for dep in &incompatible_deps {
             if content.contains(dep) {
                 compatible = false;
-                println!("Warning: Potentially incompatible code in {}: {}", 
-                    file_path.display(), dep);
+                println!(
+                    "Warning: Potentially incompatible code in {}: {}",
+                    file_path.display(),
+                    dep
+                );
             }
         }
-        
+
         Ok(())
     };
-    
+
     // Recursively walk the src directory
-    fn visit_dirs(dir: &Path, cb: &mut dyn FnMut(&Path) -> std::io::Result<()>) -> std::io::Result<()> {
+    fn visit_dirs(
+        dir: &Path,
+        cb: &mut dyn FnMut(&Path) -> std::io::Result<()>,
+    ) -> std::io::Result<()> {
         if dir.is_dir() {
             for entry in std::fs::read_dir(dir)? {
                 let entry = entry?;
@@ -388,14 +423,12 @@ pub fn check_wasi_compatibility(project_path: &Path) -> Result<bool> {
         }
         Ok(())
     }
-    
-    visit_dirs(&src_dir, &mut check_file).map_err(|e| {
-        Error::Filesystem { 
-            operation: "check".to_string(),
-            path: src_dir.clone(),
-            reason: format!("Failed to check source files: {}", e)
-        }
+
+    visit_dirs(&src_dir, &mut check_file).map_err(|e| Error::Filesystem {
+        operation: "check".to_string(),
+        path: src_dir.clone(),
+        reason: format!("Failed to check source files: {}", e),
     })?;
-    
+
     Ok(compatible)
 }

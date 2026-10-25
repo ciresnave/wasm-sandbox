@@ -1,17 +1,17 @@
 //! Code generation for wrapping applications
 
-use std::path::{Path, PathBuf};
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 pub mod cli_tool;
-pub mod http_server;
-pub mod mcp_server;
 pub mod generic;
+pub mod http_server;
 pub mod http_server_impl;
+pub mod mcp_server;
 
 // Re-export HTTP server generator
-pub use http_server_impl::{HttpServerGenerator, HttpServerConfig};
+pub use http_server_impl::{HttpServerConfig, HttpServerGenerator};
 
 use crate::error::Result;
 
@@ -19,16 +19,12 @@ use crate::error::Result;
 pub trait WrapperGenerator {
     /// Generate wrapper code for the target application
     fn generate_wrapper(&self, spec: &WrapperSpec) -> Result<String>;
-    
+
     /// Compile the wrapper to WebAssembly
     fn compile_wrapper(&self, code: &str, output_path: &Path) -> Result<()>;
-    
+
     /// Generate and compile in one step
-    fn generate_and_compile(
-        &self,
-        spec: &WrapperSpec,
-        output_path: &Path,
-    ) -> Result<()> {
+    fn generate_and_compile(&self, spec: &WrapperSpec, output_path: &Path) -> Result<()> {
         let code = self.generate_wrapper(spec)?;
         self.compile_wrapper(&code, output_path)
     }
@@ -39,13 +35,16 @@ pub trait WrapperGenerator {
 pub enum ApplicationType {
     /// HTTP server
     HttpServer { port: u16 },
-    
+
     /// MCP server
-    McpServer { port: u16, schema_path: Option<PathBuf> },
-    
+    McpServer {
+        port: u16,
+        schema_path: Option<PathBuf>,
+    },
+
     /// CLI tool
     CliTool { interactive: bool },
-    
+
     /// Generic executable
     Generic,
 }
@@ -55,10 +54,10 @@ pub enum ApplicationType {
 pub struct CommunicationSpec {
     /// Communication protocol
     pub protocol: CommunicationProtocol,
-    
+
     /// Bidirectional channels
     pub channels: Vec<String>,
-    
+
     /// RPC functions
     pub rpc_functions: HashMap<String, String>,
 }
@@ -78,10 +77,10 @@ impl Default for CommunicationSpec {
 pub enum CommunicationProtocol {
     /// JSON
     Json,
-    
+
     /// MessagePack
     MessagePack,
-    
+
     /// Custom protocol
     Custom(String),
 }
@@ -91,22 +90,22 @@ pub enum CommunicationProtocol {
 pub struct WrapperSpec {
     /// Type of application to wrap
     pub app_type: ApplicationType,
-    
+
     /// Path to the application
     pub app_path: PathBuf,
-    
+
     /// Command-line arguments
     pub arguments: Vec<String>,
-    
+
     /// Environment variables
     pub environment: HashMap<String, String>,
-    
+
     /// Working directory
     pub working_directory: Option<PathBuf>,
-    
+
     /// Communication protocol settings
     pub communication: CommunicationSpec,
-    
+
     /// Custom template variables
     pub template_variables: HashMap<String, String>,
 }

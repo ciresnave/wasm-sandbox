@@ -1,8 +1,8 @@
 //! MCP Server template
 
-use std::collections::HashMap;
-use crate::error::Result;
 use super::TemplateRenderer;
+use crate::error::Result;
+use std::collections::HashMap;
 
 /// MCP Server template renderer
 pub struct McpServerTemplate {
@@ -22,33 +22,33 @@ impl McpServerTemplate {
 impl TemplateRenderer for McpServerTemplate {
     fn render(&self, template_name: &str, variables: &HashMap<String, String>) -> Result<String> {
         if template_name != "mcp_server" {
-            return Err(crate::error::Error::Template { 
-                message: format!("Unknown template: {}", template_name) 
+            return Err(crate::error::Error::Template {
+                message: format!("Unknown template: {}", template_name),
             });
         }
-        
+
         let mut result = self.template.clone();
-        
+
         // Replace template variables
         for (key, value) in variables {
             let placeholder = format!("{{{{ {} }}}}", key);
             result = result.replace(&placeholder, value);
         }
-        
+
         Ok(result)
     }
-    
+
     fn register_template(&mut self, _name: &str, _template: &str) -> Result<()> {
         // For now, don't allow registration of new templates
         Err(crate::error::Error::Template {
-            message: "Template registration not supported".to_string()
+            message: "Template registration not supported".to_string(),
         })
     }
-    
+
     fn has_template(&self, name: &str) -> bool {
         name == "mcp_server"
     }
-    
+
     fn get_template(&self, name: &str) -> Option<&str> {
         if name == "mcp_server" {
             Some(&self.template)

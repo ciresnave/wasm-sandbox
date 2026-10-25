@@ -12,22 +12,22 @@ use crate::security::{Capabilities, ResourceLimits};
 pub struct RuntimeMetrics {
     /// Number of compiled modules
     pub compiled_modules: usize,
-    
+
     /// Number of active instances
     pub active_instances: usize,
-    
+
     /// Total memory used by all instances (in bytes)
     pub total_memory_usage: usize,
-    
+
     /// Peak memory usage (in bytes)
     pub peak_memory_usage: usize,
-    
+
     /// Fuel consumption rate (instructions per second)
     pub fuel_consumption_rate: Option<f64>,
-    
+
     /// Cache hit rate (0.0-1.0)
     pub cache_hit_rate: Option<f64>,
-    
+
     /// Compilation time for the last module (in milliseconds)
     pub last_compilation_time_ms: Option<u64>,
 }
@@ -37,22 +37,22 @@ pub struct RuntimeMetrics {
 pub struct RuntimeConfig {
     /// Enable fuel-based resource metering
     pub enable_fuel: bool,
-    
+
     /// Enable memory limits
     pub enable_memory_limits: bool,
-    
+
     /// Enable native stack trace support
     pub native_stack_trace: bool,
-    
+
     /// Enable debug information
     pub debug_info: bool,
-    
+
     /// Thread pool size for module compilation
     pub compilation_threads: usize,
-    
+
     /// Cache compiled modules
     pub cache_modules: bool,
-    
+
     /// Cache directory for compiled modules
     pub cache_directory: Option<PathBuf>,
 }
@@ -80,7 +80,7 @@ impl ModuleId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
-    
+
     /// Get the underlying UUID
     pub fn as_uuid(&self) -> Uuid {
         self.0
@@ -104,16 +104,16 @@ impl Default for ModuleId {
 pub enum WasmInstanceState {
     /// Instance is created but not started
     Created,
-    
+
     /// Instance is running
     Running,
-    
+
     /// Instance is paused
     Paused,
-    
+
     /// Instance has exited with a status code
     Exited(i32),
-    
+
     /// Instance has crashed
     Crashed,
 }
@@ -122,19 +122,19 @@ pub enum WasmInstanceState {
 pub trait WasmModule: Send + Sync {
     /// Get the module ID
     fn id(&self) -> ModuleId;
-    
+
     /// Get the module name
     fn name(&self) -> Option<&str>;
-    
+
     /// Get the module size in bytes
     fn size(&self) -> usize;
-    
+
     /// Get the list of exported functions
     fn exports(&self) -> Vec<String>;
-    
+
     /// Clone the module
     fn clone_module(&self) -> Box<dyn WasmModule>;
-    
+
     /// Get a reference to Any for downcasting
     fn as_any(&self) -> &dyn std::any::Any;
 }
@@ -143,34 +143,34 @@ pub trait WasmModule: Send + Sync {
 pub trait WasmInstance: Send + Sync {
     /// Get the instance state
     fn state(&self) -> WasmInstanceState;
-    
+
     /// Get memory usage in bytes
     fn memory_usage(&self) -> usize;
-    
+
     /// Get fuel usage (if enabled)
     fn fuel_usage(&self) -> Option<u64>;
-    
+
     /// Reset fuel counter (if enabled)
     fn reset_fuel(&self) -> Result<()>;
-    
+
     /// Add fuel (if enabled)
     fn add_fuel(&self, fuel: u64) -> Result<()>;
-    
+
     /// Get a raw pointer to the instance memory
-    /// 
+    ///
     /// # Safety
-    /// 
+    ///
     /// This is unsafe because it allows direct access to the instance's memory.
     /// The caller must ensure that they do not corrupt memory or violate WebAssembly's
     /// memory safety guarantees.
     unsafe fn memory_ptr(&self) -> Result<*mut u8>;
-    
+
     /// Get memory size in bytes
     fn memory_size(&self) -> usize;
-    
+
     /// Get the function caller for this instance
     fn function_caller(&self) -> Box<dyn WasmFunctionCaller>;
-    
+
     /// Simple function call for basic cases (add two i32s)
     /// This is a convenience method for testing and simple operations
     fn call_simple_function(&self, function_name: &str, params: &[i32]) -> Result<i32>;
@@ -179,19 +179,11 @@ pub trait WasmInstance: Send + Sync {
 /// Separate trait for generic/async function calling (dyn-compatible)
 pub trait WasmFunctionCaller: Send + Sync {
     /// Call a function in the instance with JSON serialization
-    fn call_function_json(
-        &self,
-        function_name: &str,
-        params_json: &str,
-    ) -> Result<String>;
-    
+    fn call_function_json(&self, function_name: &str, params_json: &str) -> Result<String>;
+
     /// Call a function in the instance with MessagePack serialization
-    fn call_function_msgpack(
-        &self,
-        function_name: &str,
-        params_msgpack: &[u8],
-    ) -> Result<Vec<u8>>;
-    
+    fn call_function_msgpack(&self, function_name: &str, params_msgpack: &[u8]) -> Result<Vec<u8>>;
+
     /// Get a reference to Any for downcasting
     fn as_any(&self) -> &dyn std::any::Any;
 }
@@ -205,7 +197,7 @@ pub trait WasmFunctionCallerAsync {
         function_name: &str,
         params_json: &str,
     ) -> Result<String>;
-    
+
     /// Call a function in the instance with MessagePack serialization (async version)
     async fn call_function_msgpack_async(
         &self,
@@ -218,11 +210,7 @@ pub trait WasmFunctionCallerAsync {
 #[allow(async_fn_in_trait)]
 pub trait WasmFunctionCallerExt {
     /// Call a function with compile-time type safety
-    async fn call_function<P, R>(
-        &self,
-        function_name: &str,
-        params: &P,
-    ) -> Result<R>
+    async fn call_function<P, R>(&self, function_name: &str, params: &P) -> Result<R>
     where
         P: serde::Serialize + Send + Sync,
         R: for<'de> serde::Deserialize<'de> + Send;
@@ -230,11 +218,7 @@ pub trait WasmFunctionCallerExt {
 
 /// Automatic implementation for all function callers
 impl<T: WasmFunctionCaller + Send + Sync> WasmFunctionCallerExt for T {
-    async fn call_function<P, R>(
-        &self,
-        function_name: &str,
-        params: &P,
-    ) -> Result<R>
+    async fn call_function<P, R>(&self, function_name: &str, params: &P) -> Result<R>
     where
         P: serde::Serialize + Send + Sync,
         R: for<'de> serde::Deserialize<'de> + Send,
@@ -250,27 +234,27 @@ impl<T: WasmFunctionCaller + Send + Sync> WasmFunctionCallerExt for T {
 pub trait WasmRuntime: Send + Sync {
     /// Initialize the runtime with configuration
     fn initialize(&mut self, config: RuntimeConfig) -> Result<()>;
-    
+
     /// Load a WASM module from bytes
     fn load_module(&self, wasm_bytes: &[u8]) -> Result<Box<dyn WasmModule>>;
-    
+
     /// Get a module by ID
     fn get_module(&self, id: ModuleId) -> Result<Arc<dyn WasmModule>>;
-    
+
     /// Get all module IDs
     fn get_module_ids(&self) -> Vec<ModuleId>;
-    
+
     /// Create a new instance with resource limits
     fn create_instance(
-        &self, 
-        module: &dyn WasmModule, 
+        &self,
+        module: &dyn WasmModule,
         resources: ResourceLimits,
         capabilities: Capabilities,
     ) -> Result<Box<dyn WasmInstance>>;
-    
+
     /// Get runtime metrics
     fn get_metrics(&self) -> RuntimeMetrics;
-    
+
     /// Shutdown the runtime
     fn shutdown(&self) -> Result<()>;
 }
@@ -279,7 +263,9 @@ pub trait WasmRuntime: Send + Sync {
 pub fn create_runtime(_config: &RuntimeConfig) -> Result<Box<dyn WasmRuntime>> {
     #[cfg(feature = "wasmtime-runtime")]
     {
-        Ok(Box::new(crate::runtime::wasmtime::WasmtimeRuntime::new(_config)?))
+        Ok(Box::new(crate::runtime::wasmtime::WasmtimeRuntime::new(
+            _config,
+        )?))
     }
 
     #[cfg(all(feature = "wasmer-runtime", not(feature = "wasmtime-runtime")))]
@@ -297,10 +283,10 @@ pub fn create_runtime(_config: &RuntimeConfig) -> Result<Box<dyn WasmRuntime>> {
 
 pub mod wasmtime;
 // Wasmer runtime (re-enabled with new trait structure)
+pub mod component;
+pub mod wasm_common;
 #[cfg(feature = "wasmer-runtime")]
 pub mod wasmer;
-pub mod wasm_common;
-pub mod component;
 
 // Re-export runtimes for convenience
 #[cfg(feature = "wasmtime-runtime")]

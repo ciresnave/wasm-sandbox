@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::error::{Error, Result};
-use crate::wrappers::{WrapperGenerator, WrapperSpec, ApplicationType};
+use crate::wrappers::{ApplicationType, WrapperGenerator, WrapperSpec};
 
 /// MCP server wrapper generator
 pub struct McpServerGenerator;
@@ -14,38 +14,39 @@ impl WrapperGenerator for McpServerGenerator {
         // Extract MCP-specific options
         let (port, schema_path) = match &spec.app_type {
             ApplicationType::McpServer { port, schema_path } => (*port, schema_path.clone()),
-            _ => return Err(Error::WrapperGeneration {
-                reason: "Application type must be McpServer".to_string(),
-                wrapper_type: Some("mcp_server".to_string()),
-            }),
+            _ => {
+                return Err(Error::WrapperGeneration {
+                    reason: "Application type must be McpServer".to_string(),
+                    wrapper_type: Some("mcp_server".to_string()),
+                });
+            }
         };
-        
+
         // Generate the wrapper code
         self.generate_code(spec, port, schema_path.as_ref())
     }
-    
+
     fn compile_wrapper(&self, code: &str, output_path: &Path) -> Result<()> {
         // Create a temporary directory for building
-        let temp_dir = tempfile::tempdir()
-            .map_err(|e| Error::WrapperGeneration {
-                reason: format!("Failed to create temporary directory: {}", e),
-                wrapper_type: Some("mcp_server".to_string()),
-            })?;
-        
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::WrapperGeneration {
+            reason: format!("Failed to create temporary directory: {}", e),
+            wrapper_type: Some("mcp_server".to_string()),
+        })?;
+
         // Write code to a temporary file
         let src_path = temp_dir.path().join("src/main.rs");
-        std::fs::create_dir_all(src_path.parent().unwrap())
-            .map_err(|e| Error::WrapperGeneration { 
+        std::fs::create_dir_all(src_path.parent().unwrap()).map_err(|e| {
+            Error::WrapperGeneration {
                 reason: format!("Failed to create source directory: {}", e),
                 wrapper_type: Some("mcp_server".to_string()),
-            })?;
-            
-        std::fs::write(&src_path, code)
-            .map_err(|e| Error::WrapperGeneration { 
-                reason: format!("Failed to write source code: {}", e),
-                wrapper_type: Some("mcp_server".to_string()),
-            })?;
-            
+            }
+        })?;
+
+        std::fs::write(&src_path, code).map_err(|e| Error::WrapperGeneration {
+            reason: format!("Failed to write source code: {}", e),
+            wrapper_type: Some("mcp_server".to_string()),
+        })?;
+
         // Create Cargo.toml
         let cargo_toml = r#"[package]
 name = "mcp-server-wrapper"
@@ -65,57 +66,71 @@ axum = "0.6.0"
 tower = "0.4.0"
 tower-http = { version = "0.4.0", features = ["cors"] }
 jsonschema = "0.17.0"
-"#.to_string();
-        
-        std::fs::write(temp_dir.path().join("Cargo.toml"), cargo_toml)
-            .map_err(|e| Error::WrapperGeneration {
+"#
+        .to_string();
+
+        std::fs::write(temp_dir.path().join("Cargo.toml"), cargo_toml).map_err(|e| {
+            Error::WrapperGeneration {
                 reason: format!("Failed to write Cargo.toml: {}", e),
                 wrapper_type: Some("mcp_server".to_string()),
-            })?;
-            
+            }
+        })?;
+
         // Run cargo build
         let status = Command::new("cargo")
             .current_dir(temp_dir.path())
             .args(["build", "--target", "wasm32-wasi", "--release"])
             .status()
-            .map_err(|e| Error::WrapperGeneration { 
+            .map_err(|e| Error::WrapperGeneration {
                 reason: format!("Failed to run cargo build: {}", e),
                 wrapper_type: Some("mcp_server".to_string()),
             })?;
-            
+
         if !status.success() {
-            return Err(Error::WrapperGeneration { 
+            return Err(Error::WrapperGeneration {
                 reason: "Cargo build failed".to_string(),
                 wrapper_type: Some("mcp_server".to_string()),
             });
         }
-        
+
         // Copy the output file
-        let wasm_path = temp_dir.path()
+        let wasm_path = temp_dir
+            .path()
             .join("target/wasm32-wasi/release/mcp-server-wrapper.wasm");
-            
-        std::fs::copy(wasm_path, output_path)
-            .map_err(|e| Error::WrapperGeneration { 
-                reason: format!("Failed to copy output file: {}", e),
-                wrapper_type: Some("mcp_server".to_string()),
-            })?;
-            
+
+        std::fs::copy(wasm_path, output_path).map_err(|e| Error::WrapperGeneration {
+            reason: format!("Failed to copy output file: {}", e),
+            wrapper_type: Some("mcp_server".to_string()),
+        })?;
+
         Ok(())
     }
 }
 
 impl McpServerGenerator {
     /// Generate MCP server wrapper code
-    fn generate_code(&self, spec: &WrapperSpec, port: u16, schema_path: Option<&PathBuf>) -> Result<String> {
+    fn generate_code(
+        &self,
+        spec: &WrapperSpec,
+        port: u16,
+        schema_path: Option<&PathBuf>,
+    ) -> Result<String> {
         let _app_path = spec.app_path.to_string_lossy();
         let _args = spec.arguments.join(", ");
-        
+
         // Format environment variables
-        let env_vars = spec.environment.iter()
-            .map(|(k, v)| format!("        env_map.insert(\"{}\".to_string(), \"{}\".to_string());", k, v))
+        let env_vars = spec
+            .environment
+            .iter()
+            .map(|(k, v)| {
+                format!(
+                    "        env_map.insert(\"{}\".to_string(), \"{}\".to_string());",
+                    k, v
+                )
+            })
             .collect::<Vec<_>>()
             .join("\n");
-            
+
         // Handle schema path
         let schema_code = match schema_path {
             Some(path) => format!(
@@ -129,7 +144,7 @@ impl McpServerGenerator {
             ),
             None => "    // No schema provided".to_string(),
         };
-            
+
         let code = format!(
             r#"//! MCP server wrapper for WASM sandbox
 
@@ -237,7 +252,7 @@ async fn generate(
             schema_code = schema_code,
             env_vars = env_vars,
         );
-        
+
         Ok(code)
     }
 }

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0] - Unreleased - Dependency refresh
+
+### Breaking
+
+- **wasmtime / wasmtime-wasi 34 -> 50.** WASI preview1 now comes from `wasmtime_wasi::p1`; `WasmtimeStoreData::wasi` is a `WasiP1Ctx` (was `wasi_common::WasiCtx`).
+- **wasmer 6 -> 7.5, wasmer-wasix 0.600 -> 0.705; `wasmer-runtime` is no longer available on Windows.** wasmer 7 has no native compiler backend on Windows (Cranelift and Singlepass both refuse to build); enabling the feature there is now a `compile_error!`. Linux and macOS are unaffected.
+- Minimum supported Rust version is now 1.97 (wasmtime 50).
+- Engine configuration: `max_wasm_stack` is now 1 MiB. The previous 4 GB value is rejected by wasmtime 50 (`max_wasm_stack` may not exceed `async_stack_size`) and `WasmSandbox::new()` failed with it.
+
+### Changed
+
+- Updated all dependencies to their latest versions (`rand` 0.10, `toml` 1.x, `cap-std` 4, `tokio`, `thiserror`, `uuid`, `chrono`, `rmp-serde`; dev: `criterion` 0.8, `rstest` 0.28, `mockall` 0.15). Supersedes dependabot #6.
+- Removed unused dependencies: `wasi-common`, `wit-bindgen`, `wasmtime-component-macro`, `wasmtime-component-util`, `winapi`.
+- Added hosted CI (fmt, clippy `-D warnings`, test `--locked`, doc, cargo-deny) and `deny.toml`; code formatted with `cargo fmt`.
+
 ## [0.4.1] - 2025-07-16 - Security & Quality Update
 
 ### 🔒 Security Fixes

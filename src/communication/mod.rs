@@ -8,13 +8,13 @@ use crate::error::Result;
 pub trait CommunicationChannel: Send + Sync {
     /// Send a message to the guest
     fn send_to_guest(&self, message: &[u8]) -> Result<()>;
-    
+
     /// Receive a message from the guest
     fn receive_from_guest(&self) -> Result<Vec<u8>>;
-    
+
     /// Check if there are pending messages
     fn has_messages(&self) -> bool;
-    
+
     /// Close the communication channel
     fn close(&self) -> Result<()>;
 }
@@ -31,21 +31,17 @@ pub trait RpcChannel: Send + Sync {
         name: &str,
         function: StringHandlerFunction,
     ) -> Result<()>;
-    
+
     /// Call a function in the guest with JSON serialization
-    fn call_guest_function_json(
-        &self,
-        function_name: &str,
-        params_json: &str,
-    ) -> Result<String>;
-    
+    fn call_guest_function_json(&self, function_name: &str, params_json: &str) -> Result<String>;
+
     /// Register a host function with MessagePack serialization
     fn register_host_function_msgpack(
         &mut self,
         name: &str,
         function: ByteHandlerFunction,
     ) -> Result<()>;
-    
+
     /// Call a function in the guest with MessagePack serialization
     fn call_guest_function_msgpack(
         &self,
@@ -57,16 +53,12 @@ pub trait RpcChannel: Send + Sync {
 /// Extension trait for type-safe RPC operations (generic, not dyn-compatible)
 pub trait RpcChannelExt {
     /// Register a host function that can be called from the guest
-    fn register_host_function<F, Params, Return>(
-        &mut self,
-        name: &str,
-        function: F,
-    ) -> Result<()>
+    fn register_host_function<F, Params, Return>(&mut self, name: &str, function: F) -> Result<()>
     where
         F: Fn(Params) -> Result<Return> + Send + Sync + 'static,
         Params: serde::de::DeserializeOwned + 'static,
         Return: serde::Serialize + 'static;
-    
+
     /// Call a function in the guest
     fn call_guest_function<Params, Return>(
         &self,
@@ -80,11 +72,7 @@ pub trait RpcChannelExt {
 
 /// Automatic implementation for all RPC channels
 impl<T: RpcChannel> RpcChannelExt for T {
-    fn register_host_function<F, Params, Return>(
-        &mut self,
-        name: &str,
-        function: F,
-    ) -> Result<()>
+    fn register_host_function<F, Params, Return>(&mut self, name: &str, function: F) -> Result<()>
     where
         F: Fn(Params) -> Result<Return> + Send + Sync + 'static,
         Params: serde::de::DeserializeOwned + 'static,
@@ -96,10 +84,10 @@ impl<T: RpcChannel> RpcChannelExt for T {
             let result_json = serde_json::to_string(&result)?;
             Ok(result_json)
         });
-        
+
         self.register_host_function_json(name, wrapped_function)
     }
-    
+
     fn call_guest_function<Params, Return>(
         &self,
         function_name: &str,
@@ -120,19 +108,21 @@ impl<T: RpcChannel> RpcChannelExt for T {
 pub trait CommunicationFactory: Send + Sync {
     /// Create a new communication channel
     fn create_channel(&self) -> Result<Arc<dyn CommunicationChannel>>;
-    
+
     /// Create a new RPC channel
     fn create_rpc_channel(&self) -> Result<Arc<dyn RpcChannel>>;
 }
 
 pub mod channels;
 pub mod io;
-pub mod rpc;
 pub mod memory;
 pub mod memory_channel;
+pub mod rpc;
 pub mod streaming;
 
 // Re-export memory channel for easier usage
-pub use memory_channel::{MemoryChannel, MemoryRpcChannel, MemoryChannelConfig};
-pub use streaming::{StreamingChannel, StreamingInput, StreamingOutput, StreamingChannel2Way, 
-                   StreamChunk, StreamingManager, StreamingFactory};
+pub use memory_channel::{MemoryChannel, MemoryChannelConfig, MemoryRpcChannel};
+pub use streaming::{
+    StreamChunk, StreamingChannel, StreamingChannel2Way, StreamingFactory, StreamingInput,
+    StreamingManager, StreamingOutput,
+};

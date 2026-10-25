@@ -4,7 +4,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::error::{Error, Result};
-use crate::wrappers::{WrapperGenerator, WrapperSpec, ApplicationType};
+use crate::wrappers::{ApplicationType, WrapperGenerator, WrapperSpec};
 
 /// CLI tool wrapper generator
 pub struct CliToolGenerator;
@@ -14,38 +14,39 @@ impl WrapperGenerator for CliToolGenerator {
         // Extract CLI-specific options
         let interactive = match &spec.app_type {
             ApplicationType::CliTool { interactive } => *interactive,
-            _ => return Err(Error::WrapperGeneration {
-                reason: "Application type must be CliTool".to_string(),
-                wrapper_type: Some("cli_tool".to_string()),
-            }),
+            _ => {
+                return Err(Error::WrapperGeneration {
+                    reason: "Application type must be CliTool".to_string(),
+                    wrapper_type: Some("cli_tool".to_string()),
+                });
+            }
         };
-        
+
         // Generate the wrapper code
         self.generate_code(spec, interactive)
     }
-    
+
     fn compile_wrapper(&self, code: &str, output_path: &Path) -> Result<()> {
         // Create a temporary directory for building
-        let temp_dir = tempfile::tempdir()
-            .map_err(|e| Error::WrapperGeneration {
-                reason: format!("Failed to create temporary directory: {}", e),
-                wrapper_type: Some("cli_tool".to_string()),
-            })?;
-        
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::WrapperGeneration {
+            reason: format!("Failed to create temporary directory: {}", e),
+            wrapper_type: Some("cli_tool".to_string()),
+        })?;
+
         // Write code to a temporary file
         let src_path = temp_dir.path().join("src/main.rs");
-        std::fs::create_dir_all(src_path.parent().unwrap())
-            .map_err(|e| Error::WrapperGeneration {
+        std::fs::create_dir_all(src_path.parent().unwrap()).map_err(|e| {
+            Error::WrapperGeneration {
                 reason: format!("Failed to create source directory: {}", e),
                 wrapper_type: Some("cli_tool".to_string()),
-            })?;
-            
-        std::fs::write(&src_path, code)
-            .map_err(|e| Error::WrapperGeneration {
-                reason: format!("Failed to write source code: {}", e),
-                wrapper_type: Some("cli_tool".to_string()),
-            })?;
-            
+            }
+        })?;
+
+        std::fs::write(&src_path, code).map_err(|e| Error::WrapperGeneration {
+            reason: format!("Failed to write source code: {}", e),
+            wrapper_type: Some("cli_tool".to_string()),
+        })?;
+
         // Create Cargo.toml
         let cargo_toml = r#"[package]
 name = "cli-wrapper"
@@ -60,14 +61,16 @@ tokio = { version = "1.0", features = ["full"] }
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
-"#.to_string();
-        
-        std::fs::write(temp_dir.path().join("Cargo.toml"), cargo_toml)
-            .map_err(|e| Error::WrapperGeneration {
+"#
+        .to_string();
+
+        std::fs::write(temp_dir.path().join("Cargo.toml"), cargo_toml).map_err(|e| {
+            Error::WrapperGeneration {
                 reason: format!("Failed to write Cargo.toml: {}", e),
                 wrapper_type: Some("cli_tool".to_string()),
-            })?;
-            
+            }
+        })?;
+
         // Run cargo build
         let status = Command::new("cargo")
             .current_dir(temp_dir.path())
@@ -77,24 +80,24 @@ tracing-subscriber = "0.3"
                 reason: format!("Failed to run cargo build: {}", e),
                 wrapper_type: Some("cli_tool".to_string()),
             })?;
-            
+
         if !status.success() {
             return Err(Error::WrapperGeneration {
                 reason: "Cargo build failed".to_string(),
                 wrapper_type: Some("cli_tool".to_string()),
             });
         }
-        
+
         // Copy the output file
-        let wasm_path = temp_dir.path()
+        let wasm_path = temp_dir
+            .path()
             .join("target/wasm32-wasi/release/cli-wrapper.wasm");
-            
-        std::fs::copy(wasm_path, output_path)
-            .map_err(|e| Error::WrapperGeneration {
-                reason: format!("Failed to copy output file: {}", e),
-                wrapper_type: Some("cli_tool".to_string()),
-            })?;
-            
+
+        std::fs::copy(wasm_path, output_path).map_err(|e| Error::WrapperGeneration {
+            reason: format!("Failed to copy output file: {}", e),
+            wrapper_type: Some("cli_tool".to_string()),
+        })?;
+
         Ok(())
     }
 }
@@ -104,13 +107,15 @@ impl CliToolGenerator {
     fn generate_code(&self, spec: &WrapperSpec, interactive: bool) -> Result<String> {
         let app_path = spec.app_path.to_string_lossy();
         let args = spec.arguments.join(", ");
-        
+
         // Format environment variables
-        let env_vars = spec.environment.iter()
+        let env_vars = spec
+            .environment
+            .iter()
             .map(|(k, v)| format!("\"{}\" => \"{}\"", k, v))
             .collect::<Vec<_>>()
             .join(",\n        ");
-            
+
         // Decide between interactive and non-interactive mode
         let mut code = format!(
             r#"//! CLI tool wrapper for WASM sandbox
@@ -150,7 +155,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {{
             args = args,
             env_vars = env_vars,
         );
-        
+
         // Add stdio configuration based on interactive mode
         if interactive {
             code.push_str(
@@ -219,7 +224,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {{
     info!("Process exited with status: {}", status);
     
     Ok(())
-"#
+"#,
             );
         } else {
             // Non-interactive mode
@@ -260,12 +265,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {{
     info!("Process exited with status: {}", status);
     
     Ok(())
-"#
+"#,
             );
         }
-        
+
         code.push_str("}\n");
-        
+
         Ok(code)
     }
 }

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.2] - Unreleased - Patent sweep record: full claim read
+
+### Changed
+
+- `docs/PATENT-SWEEP.md`, second addendum, hit 19 (US 2020/0366648 A1): all three independent claims now read in full from the official USPTO publication instead of the opening of claim 1; verdict unchanged (clear). Not legal advice.
+
 ## [0.7.1] - Unreleased - Patent sweep for the 0.7.0 network design
 
 ### Added

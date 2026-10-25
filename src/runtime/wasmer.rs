@@ -164,7 +164,12 @@ impl WasmerInstance {
                             params,
                             reply,
                         } => {
-                            let _ = reply.send(call_i32(&mut store, &instance, &function_name, &params));
+                            let _ = reply.send(call_i32(
+                                &mut store,
+                                &instance,
+                                &function_name,
+                                &params,
+                            ));
                         }
                     }
                 }
@@ -196,14 +201,20 @@ impl WasmerInstance {
 }
 
 /// Call an exported `i32` function on the store-owning thread.
-fn call_i32(store: &mut Store, instance: &Instance, function_name: &str, params: &[i32]) -> Result<i32> {
-    let function = instance
-        .exports
-        .get_function(function_name)
-        .map_err(|_| Error::FunctionCall {
-            function_name: function_name.to_string(),
-            reason: "Function not found".to_string(),
-        })?;
+fn call_i32(
+    store: &mut Store,
+    instance: &Instance,
+    function_name: &str,
+    params: &[i32],
+) -> Result<i32> {
+    let function =
+        instance
+            .exports
+            .get_function(function_name)
+            .map_err(|_| Error::FunctionCall {
+                function_name: function_name.to_string(),
+                reason: "Function not found".to_string(),
+            })?;
 
     let wasmer_params: Vec<Value> = params.iter().map(|&p| Value::I32(p)).collect();
     let results = function

@@ -1,7 +1,7 @@
 # Patent sweep: wasm-sandbox 0.5.0 @ e2aba5e
 
 Date: 2026-10-25; Run by: wasm-sandbox lane, Claude Sonnet 5.5; Method: AI-assisted search and read; **NOT legal advice; NOT a freedom-to-operate opinion.**
-Covers the version line **0.5.x** (swept at `origin/main` e2aba5e, the commit that became 0.5.0). The 0.6.x line is covered by the addendum at the end (swept at 1173e3e, the head of the 0.6.0 PR). Process: `C:\Projects\PATENT-SWEEP-PROCESS.md`.
+Covers the version line **0.5.x** (swept at `origin/main` e2aba5e, the commit that became 0.5.0). The 0.6.x line is covered by the first addendum (swept at 1173e3e, the head of the 0.6.0 PR) and the 0.7.x network design by the second (swept at 6bb48e3, the 0.7.0 merge). Process: `C:\Projects\PATENT-SWEEP-PROCESS.md`.
 
 ## Ideas swept
 1. A one-call API that compiles source code to WebAssembly, instantiates it in a sandbox and invokes a named exported function with typed (serialized) parameters and result.
@@ -92,3 +92,37 @@ None: no hit overlaps on an independent claim read, and none is `unread` among t
 
 ## Limitations
 Same as the main record. In addition: hits 14-16 and 18 were read only in the opening of each independent claim (about 1,400 characters), not the whole claim set; three queries only for three ideas; Google Patents returned HTTP 503 to the claims tool for several minutes during this sweep (rate limiting), so the claim reads were retried after a pause. The Google "status" values are not the official record (expiry dates not verified).
+
+---
+
+# Addendum 2: 0.7.0 network-allowlist design
+
+Date: 2026-10-25; Run by: wasm-sandbox lane, Claude Sonnet 5.5; Method and caveats as above (AI-assisted; **NOT legal advice; NOT a freedom-to-operate opinion**). Swept at 6bb48e3 (`main` after #16 merged, the code of 0.7.0); required by the PM before the 0.7.0 publish. Hits 1-18 above stand.
+
+## Ideas swept (new in 0.7.0)
+13. A per-address socket policy for a sandboxed guest, default deny, derived from a capability value (none / loopback / port ranges / named hosts / full) and applied by a host-supplied check on every address the guest uses, with name lookups disabled unless unrestricted.
+14. Resolving the allowed host names **once**, when the sandbox instance is created, into a fixed IP allow-list (a later change in the DNS answer is denied, never allowed).
+15. Comparing addresses after normalising an IPv4-mapped IPv6 form to the IPv4 address, so a rule written for one form covers the other and cannot be bypassed with the other.
+16. Classifying each use of an address as remote-peer, bind or listen, permitting the OS's implicit wildcard bind that precedes an outgoing connection while denying explicit binds and listening unless granted.
+
+## Queries (source, query, date)
+All 2026-10-25, web search restricted to patents.google.com, claims then read with `tools/patent-claims.py` (Google Patents returned 503 for about 40 minutes; retried every 5 minutes until all four fetched).
+- Q14 "patent sandbox network access control resolving allowed hostnames to IP address allowlist at sandbox creation, deny connections to addresses not in list" (ideas 13, 14)
+- Q15 "patent normalizing IPv4-mapped IPv6 address to IPv4 before matching against firewall rule or access control list" (idea 15)
+- Q16 "patent WebAssembly guest socket address callback permit or deny connect bind listen per address policy host-supplied check" (ideas 13, 16)
+
+## Hits
+| # | patent | title | assignee | status | claim(s) read | overlap | our difference | verdict |
+|---|---|---|---|---|---|---|---|---|
+| 19 | US20200366648A1 | Configuring hostname based firewall policies | ColorTokens | Active (GP) | 1, 8 (opening ~1,700 chars of claim 1; the tail of the claim, after "based on", was not read) | Hostname-based access rules turned into IP rules (ideas 13, 14) | Claims configure a **host-based firewall**, render the policy inactive **until the device issues a DNS query**, **intercept the DNS query and response** and map hostname to IP from the intercepted response; we resolve with the system resolver once at instance creation, intercept no DNS traffic and run no firewall | clear |
+| 20 | US7739401B2 | Restricting communication of selected processes to a set of specific network addresses | (individual) / Longhorn HD | Expired - Fee Related (GP) | 1, 2 (first two independent claims; 6 claim blocks) | A set of network addresses tied to a process | Claims associate a process with **multiple addresses with a separate communication channel per address** and allow reception of an incoming request on the channel that is ready; we have a per-address allow/deny check, no per-address channels, no reception handling. Expired per Google | clear |
+| 21 | US8782739B2 | Access list key compression | Cisco | Expired - Fee Related (GP) | 1, 50 | Access lists keyed on IP addresses, with special handling of IPv4-compatible / IPv4-mapped IPv6 (idea 15) | Claims **compose a compressed access-list key** by replacing a subset of address bits with a **Zone_ID** (claim 1) or by protocol-dependent key formats (claim 50) and route packets with it; we convert a mapped address to its IPv4 equivalent for comparison, with no key compression, zone identifiers or routing. Expired per Google | clear |
+| 22 | US20220286431A1 | DNS resolver-assisted domain name-based access control | Cisco | Active (GP) | 1, 7 | Domain-name-based access control (ideas 13, 14) | Claims are a **DNS resolver that sends the resolved IP, with the client's identity, to a separate firewall device** (claim 1) which builds a domain-name registry entry and matches packets (claim 7); we have no resolver, firewall device or client identification | clear |
+
+Not read (background from snippets only): US7623518B2, US8719450B2, US6985485B2/US6920136B2, US8582599B2, EP3503505B1/US20190199616A1, US20060080444A1, US9225684B2, US20030061510A1, TWI400920B, US20080222292A1. None names WASI, a sandboxed guest or the mechanisms above in the snippets returned.
+
+## Needs review (to the PM)
+None: no hit overlaps on an independent claim read, and none of the numbered hits is `unread`.
+
+## Limitations
+Same as the main record. In addition: hit 19 was read only in the opening of claim 1; hits 20-22 were read in the first independent claims; three queries for four ideas (idea 16 has no dedicated query beyond Q16); Google "status" values are not the official record and expiry dates were not verified.

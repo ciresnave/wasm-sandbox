@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.1] - Unreleased - Patent sweep for the 0.7.0 network design
+
+### Added
+
+- Second patent sweep addendum in `docs/PATENT-SWEEP.md` for the 0.7.0 network-allowlist design (4 hits read, none needing review). Not legal advice.
+
 ## [0.7.0] - Unreleased - Network enforcement for components
 
 Closes #11: network is enforced where WASI can enforce it (components); everywhere else an unenforceable

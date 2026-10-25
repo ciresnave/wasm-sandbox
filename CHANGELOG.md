@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.1] - Unreleased - Patent sweep for the 0.6.0 design
+
+### Added
+
+- Patent sweep addendum for the 0.6.0 design in `docs/PATENT-SWEEP.md` (5 hits read, none needing review). Not legal advice.
+
 ## [0.6.0] - Unreleased - Enforced filesystem capabilities, loud unsupported grants
 
 Part of #11 (not closed): filesystem is enforced on the Wasmtime backend and unsupported grants are errors there.
@@ -29,8 +35,6 @@ Part of #11 (not closed): filesystem is enforced on the Wasmtime backend and uns
 - Instance creation and guest calls run on a short-lived thread when invoked from a Tokio runtime thread:
   `wasmtime-wasi`'s synchronous preview-1 adapter blocks on a runtime of its own and panicked there
   ("Cannot start a runtime from within a runtime") for any guest that used WASI.
-
-- Patent sweep addendum for the 0.6.0 design in `docs/PATENT-SWEEP.md` (5 hits read, none needing review). Not legal advice.
 
 ### Not yet
 

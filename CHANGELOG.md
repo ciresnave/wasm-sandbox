@@ -30,6 +30,8 @@ Part of #11 (not closed): filesystem is enforced on the Wasmtime backend and uns
   `wasmtime-wasi`'s synchronous preview-1 adapter blocks on a runtime of its own and panicked there
   ("Cannot start a runtime from within a runtime") for any guest that used WASI.
 
+- Patent sweep addendum for the 0.6.0 design in `docs/PATENT-SWEEP.md` (5 hits read, none needing review). Not legal advice.
+
 ### Not yet
 
 - Network enforcement (needs the component-model path) and WASI for the Wasmer backend: tracked in #11.

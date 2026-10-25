@@ -1,7 +1,7 @@
 # Patent sweep: wasm-sandbox 0.5.0 @ e2aba5e
 
 Date: 2026-10-25; Run by: wasm-sandbox lane, Claude Sonnet 5.5; Method: AI-assisted search and read; **NOT legal advice; NOT a freedom-to-operate opinion.**
-Covers the version line **0.5.x** (swept at `origin/main` e2aba5e, the commit that became 0.5.0). Process: `C:\Projects\PATENT-SWEEP-PROCESS.md`.
+Covers the version line **0.5.x** (swept at `origin/main` e2aba5e, the commit that became 0.5.0). The 0.6.x line is covered by the addendum at the end (swept at 1173e3e, the head of the 0.6.0 PR). Process: `C:\Projects\PATENT-SWEEP-PROCESS.md`.
 
 ## Ideas swept
 1. A one-call API that compiles source code to WebAssembly, instantiates it in a sandbox and invokes a named exported function with typed (serialized) parameters and result.
@@ -58,3 +58,37 @@ None. No hit is `needs-review` and none is `unread`. (US 12683941 and its family
 - Hits 3 to 7: only the opening of the independent claim (about 1,100 characters) was read for the verdict, not the whole claim set; dependent claims were not analysed.
 - Idea 9 was not searched as a separate mechanism.
 - Not legal advice and not a freedom-to-operate opinion. Re-sweep when a new family of capability is added and at least yearly.
+
+---
+
+# Addendum: 0.6.0 filesystem-enforcement design
+
+Date: 2026-10-25; Run by: wasm-sandbox lane, Claude Sonnet 5.5; Method and caveats as above (AI-assisted; **NOT legal advice; NOT a freedom-to-operate opinion**). Swept at 1173e3e (head of the 0.6.0 PR, #14); required by the PM before the 0.6.0 publish. Hits 1-13 above stand; this adds the new mechanisms.
+
+## Ideas swept (new in 0.6.0)
+10. Mapping a capability struct's `readable_dirs` / `writable_dirs` onto WASI preopened directory handles (read-only or read-write) so the guest sees exactly those directories and cannot leave them.
+11. Rejecting, at sandbox-instance creation, a requested capability the runtime cannot enforce (an error, not a silent no-op), including combinations the underlying runtime cannot express (writable without create/delete, file-size cap).
+12. Running blocking WASI-using instance creation and guest calls on a short-lived scoped thread when invoked from an asynchronous runtime thread, to avoid a nested-runtime failure.
+
+## Queries (source, query, date)
+All 2026-10-25, web search restricted to patents.google.com, claims then read with `tools/patent-claims.py`.
+- Q11 "patent mapping granted directories to preopened read-only or read-write directory handles for WebAssembly guest WASI filesystem sandbox" (idea 10)
+- Q12 "patent rejecting sandbox instance creation when requested permission cannot be enforced by runtime, fail closed configuration validation" (idea 11)
+- Q13 "patent executing blocking runtime call on separate thread when invoked from asynchronous event loop thread to avoid nested runtime deadlock" (idea 12)
+
+## Hits
+| # | patent | title | assignee | status | claim(s) read | overlap | our difference | verdict |
+|---|---|---|---|---|---|---|---|---|
+| 14 | US9626507B2 | Hosted application sandboxing | Google | Active (GP) | 1, 12 (opening ~1,400 chars of each independent claim) | Per-directory read/write permission for sandboxed workers (from the search snippet) | The claims read are a global-level manager, cluster-level managers and process-level managers distributing jobs from work orders referencing application files; we are an in-process library with no work orders, managers or cluster | clear |
+| 15 | US6792537B1 | Mechanism for determining restrictions to impose on an implementation of a service | Sun / Oracle | Expired - Lifetime (GP, priority 1999) | 1, 15, 29 (opening of each) | Derives restrictions from the permissions granted to an application; falls back to default limitations when none are granted (nearest to idea 11) | Claim 1 derives restrictions on an **implementation of a service an application requests**, from granted permissions, with default limits merged from policies; we map capability grants to directory preopens and **refuse** grants we cannot enforce, with no service-implementation negotiation. Expired per Google (not the official record) | clear |
+| 16 | US8756604B2 | Async wrapper handling execution of asynchronous operations for synchronous and asynchronous routines | Microsoft | Expired - Fee Related (GP) | 1, 7, 13 (opening of each) | Handles a sync routine calling async work by running it elsewhere and blocking for completion (idea 12) | Claims require an async wrapper that **sets a state flag distinguishing a request from an async routine vs. from a sync-over-async wrapper** and marshals results accordingly; we only test whether a runtime is current and, if so, run the call on a scoped thread, with no flag and no marshaling. Expired per Google | clear |
+| 17 | US9197417B2 | Hosted application sandbox model | Microsoft | Active (GP) | 1, 19, 20 | Hosted application instances | Claims allocate per-instance **subdomains mapped through a routing-table rule** and serve a UI through the selected subdomain; unrelated to this crate | clear |
+| 18 | US8280908B2 | Merging file system directories | Microsoft | Expired - Fee Related (GP) | 1, 7 (opening of each) | Per-silo views of file system directories, some read-only/read-write (from the search snippet) | Claims require an **operating-system silo with a filter driver** that resolves names across silo-specific directory views; we preopen host directories into a WASI guest with no OS-level silo or filter driver | clear |
+
+Not read (background from snippets only): US20080005133A1 (same family as hit 18), US9524396B2 (per-client directories on a network filesystem), WO2016131830A1, US8799862B2, US8719215B2, US20070261124A1, US8060878B2, US6012081A. None names WASI, preopens or Wasm in the snippets returned.
+
+## Needs review (to the PM)
+None: no hit overlaps on an independent claim read, and none is `unread` among the numbered hits.
+
+## Limitations
+Same as the main record. In addition: hits 14-16 and 18 were read only in the opening of each independent claim (about 1,400 characters), not the whole claim set; three queries only for three ideas; Google Patents returned HTTP 503 to the claims tool for several minutes during this sweep (rate limiting), so the claim reads were retried after a pause. The Google "status" values are not the official record (expiry dates not verified).

@@ -42,12 +42,12 @@ let sandbox = WasmSandbox::builder()
 
 ## Key Features
 
-- **🔒 Security First**: Isolate untrusted code in WebAssembly sandboxes; the guest gets no filesystem, network or process access, and environment-variable allow-lists are enforced
+- **🔒 Security First**: Isolate untrusted code in WebAssembly sandboxes; the guest has no filesystem, network or process access unless granted, and a grant the runtime cannot honour is an error
 - **🚀 High Performance**: Efficient host-guest communication with minimal overhead
 - **🔧 Flexible APIs**: High-level convenience APIs and low-level control for advanced use cases
 - **📦 Multiple Runtimes**: Support for Wasmtime and Wasmer WebAssembly runtimes
 - **🌐 Application Wrappers**: Built-in support for HTTP servers, MCP servers, and CLI tools
-- **📊 Resource Control**: Instruction (fuel) limits and environment-variable allow-lists are enforced. Filesystem and network *capabilities* are not yet enforced: granting one does nothing, and the guest gets neither (see [#11](https://github.com/ciresnave/wasm-sandbox/issues/11))
+- **📊 Resource Control**: Instruction (fuel) limits, environment-variable allow-lists and filesystem directory grants (read-only or read-write) are enforced; network and process capabilities are not supported yet (see [#11](https://github.com/ciresnave/wasm-sandbox/issues/11))
 - **🔄 Async/Await**: Full async support for non-blocking operations
 
 ## ✨ NEW Major Additions in v0.4.0
@@ -225,9 +225,10 @@ let config = InstanceConfig {
 let instance_id = sandbox.create_instance(module_id, Some(config))?;
 ```
 
-Today the runtime applies the environment allow-list and the fuel budget. `filesystem` and
-`network` capabilities are accepted but **not yet applied**: the guest has no filesystem or
-network access whatever you grant ([#11](https://github.com/ciresnave/wasm-sandbox/issues/11)).
+Today the runtime applies the environment allow-list, the fuel budget and filesystem directory grants
+(`readable_dirs` read-only, `writable_dirs` read-write). `network` and `process` capabilities are **not
+supported yet**: anything other than `None` makes `create_instance` return `Error::Capability`
+([#11](https://github.com/ciresnave/wasm-sandbox/issues/11)).
 See the [Security Configuration guide](docs/guides/security-config.md) and the runnable
 [`examples/security_config.rs`](examples/security_config.rs).
 

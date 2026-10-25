@@ -5301,7 +5301,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-sandbox"
-version = "0.5.3"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "async-stream",

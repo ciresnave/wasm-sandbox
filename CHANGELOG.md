@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.1] - Unreleased - Patent sweep for the 0.6.0 design
+
+### Added
+
+- Patent sweep addendum for the 0.6.0 design in `docs/PATENT-SWEEP.md` (5 hits read, none needing review). Not legal advice.
+
 ## [0.6.0] - Unreleased - Enforced filesystem capabilities, loud unsupported grants
 
 Part of #11 (not closed): filesystem is enforced on the Wasmtime backend and unsupported grants are errors there.

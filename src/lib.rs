@@ -723,6 +723,12 @@ impl WasmSandboxBuilder {
                     .capabilities
                     .filesystem
                     .allow_create = true;
+                // A writable preopen creates, deletes and modifies together.
+                self.config
+                    .default_instance_config
+                    .capabilities
+                    .filesystem
+                    .allow_delete = true;
             } else {
                 // Clear file access
                 self.config
@@ -742,6 +748,11 @@ impl WasmSandboxBuilder {
                     .capabilities
                     .filesystem
                     .allow_create = false;
+                self.config
+                    .default_instance_config
+                    .capabilities
+                    .filesystem
+                    .allow_delete = false;
             }
         }
 

@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use dashmap::DashMap;
 use wasmtime::{Config, Engine, Instance, Linker, Memory, Module, Store, Val};
 use wasmtime_wasi::{
-    WasiCtxBuilder,
+    FsPerms, WasiCtxBuilder,
     p1::{WasiP1Ctx, add_to_linker_sync},
 };
 
@@ -293,6 +293,89 @@ impl WasmInstance for WasmtimeInstance {
     }
 }
 
+/// A directory to preopen for the guest, with the permissions it was granted.
+#[derive(Debug, PartialEq)]
+struct Preopen {
+    host: std::path::PathBuf,
+    guest: String,
+    perms: FsPerms,
+}
+
+/// Refuse capability grants the Wasmtime core-module backend cannot apply.
+///
+/// A grant that is accepted but does nothing reads as a working permission, so these are
+/// errors rather than silent no-ops. WASI preview 1 has no socket API and no process API, cannot
+/// grant create, delete and modify separately (a preopen is read-only or read-write) and cannot
+/// cap file sizes.
+fn validate_capabilities(capabilities: &Capabilities) -> Result<()> {
+    use crate::security::{NetworkCapability, ProcessCapability};
+
+    let unsupported = |what: &str, why: &str| {
+        Err(Error::Capability {
+            message: format!("{what} is not supported by the Wasmtime backend: {why}"),
+        })
+    };
+
+    if capabilities.network != NetworkCapability::None {
+        return unsupported(
+            "a network capability",
+            "core modules have no socket API, so the guest has no network access; use NetworkCapability::None",
+        );
+    }
+    if capabilities.process != ProcessCapability::None {
+        return unsupported(
+            "a process capability",
+            "the guest cannot start processes; use ProcessCapability::None",
+        );
+    }
+
+    let fs = &capabilities.filesystem;
+    if !fs.writable_dirs.is_empty() {
+        if !(fs.allow_create && fs.allow_delete) {
+            return unsupported(
+                "writable_dirs without allow_create and allow_delete",
+                "a writable preopen allows creating, deleting and modifying files together; set both flags to true",
+            );
+        }
+        if fs.max_file_size.is_some() {
+            return unsupported(
+                "max_file_size",
+                "WASI cannot cap file sizes; set it to None",
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Directories to preopen, in fd order starting at 3. A directory listed as both readable and
+/// writable is mounted once, read-write. The guest sees each directory
+/// at the path it was given (with `\` written as `/`).
+fn preopen_plan(fs: &crate::security::FilesystemCapability) -> Vec<Preopen> {
+    let mut plan: Vec<Preopen> = Vec::new();
+
+    let mut add = |path: &std::path::Path, perms: FsPerms| {
+        if let Some(existing) = plan.iter_mut().find(|p| p.host == path) {
+            if perms == FsPerms::ReadWrite {
+                existing.perms = FsPerms::ReadWrite;
+            }
+        } else {
+            plan.push(Preopen {
+                host: path.to_path_buf(),
+                guest: path.to_string_lossy().replace('\\', "/"),
+                perms,
+            });
+        }
+    };
+
+    for dir in &fs.readable_dirs {
+        add(dir, FsPerms::ReadOnly);
+    }
+    for dir in &fs.writable_dirs {
+        add(dir, FsPerms::ReadWrite);
+    }
+    plan
+}
+
 /// Wasmtime runtime implementation
 pub struct WasmtimeRuntime {
     /// Wasmtime engine
@@ -490,11 +573,20 @@ impl WasmRuntime for WasmtimeRuntime {
             }
         }
 
-        // Configure filesystem capabilities - simplified version for now
-        // In a real implementation, this would properly handle directory access permissions
-        if !capabilities.filesystem.readable_dirs.is_empty() {
-            // Just log that we'd be configuring dirs
-            log::warn!("Directory access capabilities are not yet fully implemented");
+        // Reject grants this backend cannot apply, then preopen the granted directories.
+        // Preopens are the only filesystem access the guest gets; fds 0-2 are stdio, so the
+        // first preopened directory is fd 3, in the order returned by `preopen_plan`.
+        validate_capabilities(&capabilities)?;
+        for dir in preopen_plan(&capabilities.filesystem) {
+            wasi_builder
+                .preopened_dir(&dir.host, &dir.guest, dir.perms)
+                .map_err(|e| Error::Capability {
+                    message: format!(
+                        "cannot preopen directory '{}' for the guest: {}",
+                        dir.host.display(),
+                        e
+                    ),
+                })?;
         }
 
         // Build the WASI context

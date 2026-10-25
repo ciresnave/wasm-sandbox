@@ -36,16 +36,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Configure the sandbox instance
     let instance_config = InstanceConfig {
         capabilities: Capabilities {
-            // Allow localhost connections only
-            network: NetworkCapability::Loopback,
+            // Network capabilities are not supported by the Wasmtime backend yet (#11):
+            // anything other than `None` makes `create_instance` fail with `Error::Capability`.
+            network: NetworkCapability::None,
 
             // Limited filesystem access
             filesystem: FilesystemCapability {
                 readable_dirs: vec![std::env::current_dir()?],
                 writable_dirs: vec![std::env::temp_dir()],
-                max_file_size: Some(1024 * 1024), // 1MB
+                // Writable directories need both flags (a preopen is read-only or read-write)
+                // and cannot cap file size, so `max_file_size` must stay `None`.
+                max_file_size: None,
                 allow_create: true,
-                allow_delete: false,
+                allow_delete: true,
             },
 
             // Limited environment access

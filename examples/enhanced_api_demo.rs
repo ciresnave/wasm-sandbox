@@ -91,7 +91,7 @@ async fn demonstrate_builder_pattern() -> Result<(), Box<dyn std::error::Error>>
             read_paths: vec![data_path.into(), config_path.into()],
             write_paths: vec![output2_path.into()],
             temp_dir_access: true,
-            max_file_size: MemoryUnit::mb(10) as usize,
+            max_file_size: None, // WASI cannot cap file size; must be None
             deny_all: false,
         },
         env_vars: vec!["HOME".to_string(), "PATH".to_string()],
@@ -256,7 +256,7 @@ async fn demonstrate_plugin_system() -> Result<(), Box<dyn std::error::Error>> {
                 read_paths: vec!["/data".into()],
                 write_paths: vec!["/output".into()],
                 temp_dir_access: true,
-                max_file_size: MemoryUnit::mb(10) as usize,
+                max_file_size: None, // WASI cannot cap file size; must be None
                 deny_all: false,
             },
             network: NetworkPolicy {

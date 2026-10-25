@@ -284,6 +284,7 @@ pub fn create_runtime(_config: &RuntimeConfig) -> Result<Box<dyn WasmRuntime>> {
 pub mod wasmtime;
 // Wasmer runtime (re-enabled with new trait structure)
 pub mod component;
+pub(crate) mod network_policy;
 pub mod wasm_common;
 #[cfg(feature = "wasmer-runtime")]
 pub mod wasmer;

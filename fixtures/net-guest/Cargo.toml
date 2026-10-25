@@ -1,0 +1,16 @@
+[package]
+name = "net-guest"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+# Detach from any enclosing workspace: this is a stand-alone fixture, built by hand (see README.md).
+[workspace]
+
+[dependencies]
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true

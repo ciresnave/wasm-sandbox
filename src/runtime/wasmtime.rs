@@ -305,7 +305,7 @@ impl WasmtimeInstance {
 /// WASI preview 1 (`wasmtime-wasi`'s sync adapter) blocks on a runtime of its own for every call,
 /// which panics ("Cannot start a runtime from within a runtime") on a runtime worker thread. When
 /// we are on one, `f` runs on a short-lived scoped thread instead; otherwise it runs inline.
-fn off_runtime<R: Send>(f: impl FnOnce() -> R + Send) -> R {
+pub(crate) fn off_runtime<R: Send>(f: impl FnOnce() -> R + Send) -> R {
     if tokio::runtime::Handle::try_current().is_err() {
         return f();
     }
@@ -317,10 +317,10 @@ fn off_runtime<R: Send>(f: impl FnOnce() -> R + Send) -> R {
 
 /// A directory to preopen for the guest, with the permissions it was granted.
 #[derive(Debug, PartialEq)]
-struct Preopen {
-    host: std::path::PathBuf,
-    guest: String,
-    perms: FsPerms,
+pub(crate) struct Preopen {
+    pub(crate) host: std::path::PathBuf,
+    pub(crate) guest: String,
+    pub(crate) perms: FsPerms,
 }
 
 /// Refuse capability grants the Wasmtime core-module backend cannot apply.
@@ -351,7 +351,17 @@ fn validate_capabilities(capabilities: &Capabilities) -> Result<()> {
         );
     }
 
-    let fs = &capabilities.filesystem;
+    validate_filesystem(&capabilities.filesystem)
+}
+
+/// The filesystem part of [`validate_capabilities`], shared with the component-model backend.
+pub(crate) fn validate_filesystem(fs: &crate::security::FilesystemCapability) -> Result<()> {
+    let unsupported = |what: &str, why: &str| {
+        Err(Error::Capability {
+            message: format!("{what} is not supported by the Wasmtime backend: {why}"),
+        })
+    };
+
     if !fs.writable_dirs.is_empty() {
         if !(fs.allow_create && fs.allow_delete) {
             return unsupported(
@@ -372,7 +382,7 @@ fn validate_capabilities(capabilities: &Capabilities) -> Result<()> {
 /// Directories to preopen, in fd order starting at 3. A directory listed as both readable and
 /// writable is mounted once, read-write. The guest sees each directory
 /// at the path it was given (with `\` written as `/`).
-fn preopen_plan(fs: &crate::security::FilesystemCapability) -> Vec<Preopen> {
+pub(crate) fn preopen_plan(fs: &crate::security::FilesystemCapability) -> Vec<Preopen> {
     let mut plan: Vec<Preopen> = Vec::new();
 
     let mut add = |path: &std::path::Path, perms: FsPerms| {

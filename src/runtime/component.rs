@@ -13,15 +13,21 @@ use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use wasmtime::component::{Component, Instance, Linker};
+use wasmtime::component::{Component, Instance, Linker, ResourceTable};
 use wasmtime::{Engine, Store};
+use wasmtime_wasi::p2::bindings::sync::Command;
+use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
+use wasmtime_wasi::sockets::SocketAddrUse;
+use wasmtime_wasi::{I32Exit, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 use crate::error::{Error, Result};
+use crate::runtime::network_policy::{NetUse, NetworkPolicy};
+use crate::runtime::wasmtime::{preopen_plan, validate_filesystem};
 use crate::runtime::{
     ModuleId, RuntimeConfig, RuntimeMetrics, WasmFunctionCaller, WasmInstance, WasmInstanceState,
     WasmModule, WasmRuntime,
 };
-use crate::security::{Capabilities, ResourceLimits};
+use crate::security::{Capabilities, EnvironmentCapability, ProcessCapability, ResourceLimits};
 
 /// A WebAssembly Component Module
 pub struct ComponentModule {
@@ -271,10 +277,9 @@ impl ComponentRuntime {
         // Configure for component model support
         config.wasm_component_model(true);
 
-        // Apply other security settings
-        if default_resource_limits.memory.max_memory_pages > 0 {
-            config.max_wasm_stack(default_resource_limits.memory.max_memory_pages as usize * 65536);
-        }
+        // Note: memory limits are not a wasm *stack* limit. This used to call `max_wasm_stack` with
+        // the memory size, which wasmtime 50 rejects whenever it exceeds `async_stack_size`, so a
+        // runtime could not be created with the default limits.
 
         let engine = Engine::new(&config).map_err(|e| Error::RuntimeInitialization {
             message: e.to_string(),
@@ -301,6 +306,43 @@ impl ComponentRuntime {
             message: e.to_string(),
         })?;
         self.create_component_module(&bytes)
+    }
+
+    /// Create a WASI command instance with its capabilities applied, keeping the concrete type so
+    /// the command can be run with [`WasiComponentInstance::run_command`] to capture its output.
+    ///
+    /// Grants the component runtime cannot honour (a process capability, a writable directory
+    /// without create and delete, a file-size cap, a `secure` or unresolvable host) are
+    /// [`Error::Capability`] here rather than being ignored.
+    pub fn create_command_instance(
+        &self,
+        module: &dyn WasmModule,
+        capabilities: Capabilities,
+    ) -> Result<WasiComponentInstance> {
+        let component = module
+            .as_any()
+            .downcast_ref::<ComponentModule>()
+            .ok_or_else(|| Error::InstanceCreation {
+                reason: "Module is not a ComponentModule".to_string(),
+                instance_id: None,
+            })?;
+
+        if capabilities.process != ProcessCapability::None {
+            return Err(Error::Capability {
+                message: "a process capability is not supported for components: the guest cannot                           start processes; use ProcessCapability::None"
+                    .to_string(),
+            });
+        }
+        validate_filesystem(&capabilities.filesystem)?;
+        let network = NetworkPolicy::from_capability(&capabilities.network)?;
+
+        Ok(WasiComponentInstance {
+            engine: self.engine.clone(),
+            component: component.component.clone(),
+            module_id: component.id,
+            capabilities,
+            network: Arc::new(network),
+        })
     }
 
     /// Create a default store for components
@@ -339,13 +381,13 @@ impl WasmRuntime for ComponentRuntime {
 
     fn create_instance(
         &self,
-        _module: &dyn WasmModule,
+        module: &dyn WasmModule,
         _resources: ResourceLimits,
-        _capabilities: Capabilities,
+        capabilities: Capabilities,
     ) -> Result<Box<dyn WasmInstance>> {
-        Err(Error::UnsupportedOperation {
-            message: "Instance creation interface not implemented for components yet".to_string(),
-        })
+        Ok(Box::new(
+            self.create_command_instance(module, capabilities)?,
+        ))
     }
 
     fn get_metrics(&self) -> RuntimeMetrics {
@@ -363,5 +405,208 @@ impl WasmRuntime for ComponentRuntime {
     fn shutdown(&self) -> Result<()> {
         // Component runtime shutdown
         Ok(())
+    }
+}
+
+/// Capture limit for a command's stdout and stderr, in bytes.
+const OUTPUT_LIMIT: usize = 64 * 1024;
+
+/// WASI state for a component command: the context built from the instance's capabilities.
+struct WasiState {
+    ctx: WasiCtx,
+    table: ResourceTable,
+}
+
+impl WasiView for WasiState {
+    fn ctx(&mut self) -> WasiCtxView<'_> {
+        WasiCtxView {
+            ctx: &mut self.ctx,
+            table: &mut self.table,
+        }
+    }
+}
+
+fn net_use(usage: SocketAddrUse) -> NetUse {
+    match usage {
+        SocketAddrUse::TcpBind | SocketAddrUse::UdpBind => NetUse::Bind,
+        SocketAddrUse::TcpListen => NetUse::Listen,
+        SocketAddrUse::TcpAccept
+        | SocketAddrUse::TcpConnect
+        | SocketAddrUse::UdpSend
+        | SocketAddrUse::UdpReceive => NetUse::Remote,
+    }
+}
+
+/// Environment variables the capability lets through, read from the host process.
+fn env_pairs(environment: &EnvironmentCapability) -> Vec<(String, String)> {
+    match environment {
+        EnvironmentCapability::None => Vec::new(),
+        EnvironmentCapability::Allowlist(vars) => {
+            std::env::vars().filter(|(k, _)| vars.contains(k)).collect()
+        }
+        EnvironmentCapability::Denylist(vars) => std::env::vars()
+            .filter(|(k, _)| !vars.contains(k))
+            .collect(),
+        EnvironmentCapability::Full => std::env::vars().collect(),
+    }
+}
+
+/// A WASI preview-2 *command* component with the instance's capabilities applied.
+///
+/// Create it with [`ComponentRuntime::create_instance`]. Each call of `call_simple_function("run",
+/// &[])` runs the component's `wasi:cli/run` in a fresh WASI context (so a command can be run
+/// repeatedly) and returns its exit code: `0` on success or `1` on failure. Directory grants, the environment allow-list and the network policy
+/// apply to every run; the default is no sockets, no name lookups and no directories.
+pub struct WasiComponentInstance {
+    engine: Engine,
+    component: Component,
+    module_id: ModuleId,
+    capabilities: Capabilities,
+    network: Arc<NetworkPolicy>,
+}
+
+/// What a command component did when run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandOutput {
+    /// `0` if `run` succeeded, `1` if it returned an error or called `exit` with a failure
+    /// (WASI preview 2 carries no other exit code), or the code of an `I32Exit` trap.
+    pub exit_code: i32,
+    /// Everything the guest wrote to stdout (at most 64 KiB; the guest gets an error beyond that).
+    pub stdout: Vec<u8>,
+    /// Everything the guest wrote to stderr (same limit).
+    pub stderr: Vec<u8>,
+}
+
+impl WasiComponentInstance {
+    /// Run the component's `wasi:cli/run` once, in a fresh WASI context, and return its exit code
+    /// and captured output.
+    pub fn run_command(&self) -> Result<CommandOutput> {
+        // WASI preview 2's sync adapter blocks on a runtime of its own, which panics on a Tokio
+        // worker thread; run on a plain thread when called from one.
+        crate::runtime::wasmtime::off_runtime(|| self.run_command_blocking())
+    }
+
+    fn run_command_blocking(&self) -> Result<CommandOutput> {
+        let cap_err = |what: &str, e: &dyn std::fmt::Display| Error::Capability {
+            message: format!("{what}: {e}"),
+        };
+
+        let stdout = MemoryOutputPipe::new(OUTPUT_LIMIT);
+        let stderr = MemoryOutputPipe::new(OUTPUT_LIMIT);
+        let mut builder = WasiCtxBuilder::new();
+        builder.stdout(stdout.clone()).stderr(stderr.clone());
+        for (k, v) in env_pairs(&self.capabilities.environment) {
+            builder.env(&k, &v);
+        }
+        for dir in preopen_plan(&self.capabilities.filesystem) {
+            builder
+                .preopened_dir(&dir.host, &dir.guest, dir.perms)
+                .map_err(|e| {
+                    cap_err(
+                        &format!(
+                            "cannot preopen directory '{}' for the guest",
+                            dir.host.display()
+                        ),
+                        &e,
+                    )
+                })?;
+        }
+        // Default deny: sockets and name lookups stay off unless the capability asks for them.
+        builder
+            .allow_tcp(self.network.sockets_enabled())
+            .allow_udp(self.network.sockets_enabled())
+            .allow_ip_name_lookup(self.network.name_lookup_enabled());
+        let policy = Arc::clone(&self.network);
+        builder.socket_addr_check(move |addr, usage| {
+            let allowed = policy.permits(addr, net_use(usage));
+            Box::pin(async move { allowed })
+        });
+
+        let mut store = Store::new(
+            &self.engine,
+            WasiState {
+                ctx: builder.build(),
+                table: ResourceTable::new(),
+            },
+        );
+        let mut linker = Linker::new(&self.engine);
+        wasmtime_wasi::p2::add_to_linker_sync(&mut linker).map_err(|e| {
+            Error::InstanceCreation {
+                reason: format!("Failed to add WASI to linker: {e}"),
+                instance_id: Some(self.module_id.as_uuid()),
+            }
+        })?;
+        let command = Command::instantiate(&mut store, &self.component, &linker).map_err(|e| {
+            Error::InstanceCreation {
+                reason: e.to_string(),
+                instance_id: Some(self.module_id.as_uuid()),
+            }
+        })?;
+
+        let exit_code = match command.wasi_cli_run().call_run(&mut store) {
+            Ok(Ok(())) => 0,
+            Ok(Err(())) => 1,
+            Err(e) => match e.downcast_ref::<I32Exit>() {
+                Some(I32Exit(code)) => *code,
+                None => {
+                    return Err(Error::FunctionCall {
+                        function_name: "run".to_string(),
+                        reason: e.to_string(),
+                    });
+                }
+            },
+        };
+        Ok(CommandOutput {
+            exit_code,
+            stdout: stdout.contents().to_vec(),
+            stderr: stderr.contents().to_vec(),
+        })
+    }
+}
+
+impl WasmInstance for WasiComponentInstance {
+    fn state(&self) -> WasmInstanceState {
+        WasmInstanceState::Running
+    }
+
+    fn memory_usage(&self) -> usize {
+        0
+    }
+
+    fn fuel_usage(&self) -> Option<u64> {
+        None
+    }
+
+    fn reset_fuel(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn add_fuel(&self, _fuel: u64) -> Result<()> {
+        Ok(())
+    }
+
+    unsafe fn memory_ptr(&self) -> Result<*mut u8> {
+        Err(Error::UnsupportedOperation {
+            message: "Direct memory access not supported for components".to_string(),
+        })
+    }
+
+    fn memory_size(&self) -> usize {
+        0
+    }
+
+    fn function_caller(&self) -> Box<dyn WasmFunctionCaller> {
+        Box::new(ComponentFunctionCaller {})
+    }
+
+    fn call_simple_function(&self, function_name: &str, params: &[i32]) -> Result<i32> {
+        if function_name != "run" || !params.is_empty() {
+            return Err(Error::UnsupportedOperation {
+                message: "components expose only `run` (no parameters), which runs the command \
+                          and returns its exit code"
+                    .to_string(),
+            });
+        }
+        Ok(self.run_command()?.exit_code)
     }
 }

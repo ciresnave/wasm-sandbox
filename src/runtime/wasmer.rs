@@ -2,9 +2,9 @@
 
 use std::any::Any;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock, mpsc};
 
-use wasmer::{Engine, Instance, Memory, Module, Store, Value, imports};
+use wasmer::{Engine, Instance, Module, Store, Value, imports};
 
 use crate::error::{Error, Result};
 use crate::runtime::{
@@ -89,13 +89,26 @@ impl WasmModule for WasmerModule {
     }
 }
 
-/// Wasmer instance implementation
-pub struct WasmerInstance {
-    /// Store for the instance (with interior mutability)
-    store: Mutex<Store>,
+/// A request to the thread that owns a Wasmer `Store`.
+enum StoreRequest {
+    MemoryUsage(mpsc::Sender<usize>),
+    MemoryPtr(mpsc::Sender<Option<usize>>),
+    Call {
+        function_name: String,
+        params: Vec<i32>,
+        reply: mpsc::Sender<Result<i32>>,
+    },
+}
 
-    /// Instance
-    instance: Instance,
+/// Wasmer instance implementation
+///
+/// Wasmer 7's `Store` is deliberately neither `Send` nor `Sync`, so it (and the `Instance`
+/// and `Memory` handles tied to it) never leaves the thread that created it. This type holds
+/// only a channel to that thread, which keeps `WasmInstance: Send + Sync` without `unsafe`.
+/// The thread exits when this value is dropped.
+pub struct WasmerInstance {
+    /// Channel to the thread that owns the store and instance
+    requests: mpsc::Sender<StoreRequest>,
 
     /// Module ID
     #[allow(dead_code)]
@@ -109,22 +122,104 @@ pub struct WasmerInstance {
 }
 
 impl WasmerInstance {
-    /// Create a new Wasmer instance
-    pub fn new(store: Store, instance: Instance, module_id: ModuleId) -> Result<Self> {
-        let initial_state = WasmInstanceState::Running;
+    /// Create a new Wasmer instance: spawns the store-owning thread and instantiates `module`
+    /// on it, returning once instantiation has succeeded or failed.
+    pub fn new(engine: Engine, module: Module, module_id: ModuleId) -> Result<Self> {
+        let (requests, inbox) = mpsc::channel::<StoreRequest>();
+        let (ready_tx, ready_rx) = mpsc::channel::<Result<()>>();
+
+        std::thread::Builder::new()
+            .name("wasmer-store".to_string())
+            .spawn(move || {
+                let mut store = Store::new(engine);
+                // Imports are empty for now - WASI imports are not yet wired up
+                let imports = imports! {};
+                let instance = match Instance::new(&mut store, &module, &imports) {
+                    Ok(instance) => instance,
+                    Err(e) => {
+                        let _ = ready_tx.send(Err(Error::InstanceCreation {
+                            reason: e.to_string(),
+                            instance_id: Some(module_id.as_uuid()),
+                        }));
+                        return;
+                    }
+                };
+                let memory = instance.exports.get_memory("memory").ok().cloned();
+                let _ = ready_tx.send(Ok(()));
+
+                while let Ok(request) = inbox.recv() {
+                    match request {
+                        StoreRequest::MemoryUsage(reply) => {
+                            let size = memory
+                                .as_ref()
+                                .map_or(0, |m| m.view(&store).size().bytes().0);
+                            let _ = reply.send(size);
+                        }
+                        StoreRequest::MemoryPtr(reply) => {
+                            let ptr = memory.as_ref().map(|m| m.view(&store).data_ptr() as usize);
+                            let _ = reply.send(ptr);
+                        }
+                        StoreRequest::Call {
+                            function_name,
+                            params,
+                            reply,
+                        } => {
+                            let _ = reply.send(call_i32(&mut store, &instance, &function_name, &params));
+                        }
+                    }
+                }
+            })
+            .map_err(|e| Error::InstanceCreation {
+                reason: format!("Failed to spawn Wasmer store thread: {}", e),
+                instance_id: Some(module_id.as_uuid()),
+            })?;
+
+        ready_rx.recv().map_err(|_| Error::InstanceCreation {
+            reason: "Wasmer store thread exited during instantiation".to_string(),
+            instance_id: Some(module_id.as_uuid()),
+        })??;
 
         Ok(Self {
-            store: Mutex::new(store),
-            instance,
+            requests,
             module_id,
-            state: RwLock::new(initial_state),
+            state: RwLock::new(WasmInstanceState::Running),
             fuel_usage: RwLock::new(None),
         })
     }
 
-    /// Helper method to get the memory instance
-    fn get_memory(&self) -> Option<Memory> {
-        self.instance.exports.get_memory("memory").ok().cloned()
+    /// Send a request and wait for the store thread's answer, if it is still running.
+    fn ask<T>(&self, make: impl FnOnce(mpsc::Sender<T>) -> StoreRequest) -> Option<T> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        self.requests.send(make(reply_tx)).ok()?;
+        reply_rx.recv().ok()
+    }
+}
+
+/// Call an exported `i32` function on the store-owning thread.
+fn call_i32(store: &mut Store, instance: &Instance, function_name: &str, params: &[i32]) -> Result<i32> {
+    let function = instance
+        .exports
+        .get_function(function_name)
+        .map_err(|_| Error::FunctionCall {
+            function_name: function_name.to_string(),
+            reason: "Function not found".to_string(),
+        })?;
+
+    let wasmer_params: Vec<Value> = params.iter().map(|&p| Value::I32(p)).collect();
+    let results = function
+        .call(store, &wasmer_params)
+        .map_err(|e| Error::FunctionCall {
+            function_name: function_name.to_string(),
+            reason: e.to_string(),
+        })?;
+
+    if let Some(Value::I32(result)) = results.first() {
+        Ok(*result)
+    } else {
+        Err(Error::FunctionCall {
+            function_name: function_name.to_string(),
+            reason: "Function did not return an i32".to_string(),
+        })
     }
 }
 
@@ -134,13 +229,7 @@ impl WasmInstance for WasmerInstance {
     }
 
     fn memory_usage(&self) -> usize {
-        if let Some(memory) = self.get_memory() {
-            let store = self.store.lock().unwrap();
-            let size = memory.view(&store).size();
-            size.bytes().0
-        } else {
-            0
-        }
+        self.ask(StoreRequest::MemoryUsage).unwrap_or(0)
     }
 
     fn fuel_usage(&self) -> Option<u64> {
@@ -163,15 +252,12 @@ impl WasmInstance for WasmerInstance {
     }
 
     unsafe fn memory_ptr(&self) -> Result<*mut u8> {
-        if let Some(memory) = self.get_memory() {
-            let store = self.store.lock().unwrap();
-            let view = memory.view(&store);
-            Ok(view.data_ptr())
-        } else {
-            Err(Error::InstanceCreation {
+        match self.ask(StoreRequest::MemoryPtr).flatten() {
+            Some(ptr) => Ok(ptr as *mut u8),
+            None => Err(Error::InstanceCreation {
                 reason: "Memory export not found".to_string(),
                 instance_id: Some(self.module_id.as_uuid()),
-            })
+            }),
         }
     }
 
@@ -184,38 +270,17 @@ impl WasmInstance for WasmerInstance {
     }
 
     fn call_simple_function(&self, function_name: &str, params: &[i32]) -> Result<i32> {
-        // Get the function from the instance
-        let function = self
-            .instance
-            .exports
-            .get_function(function_name)
-            .map_err(|_| Error::FunctionCall {
-                function_name: function_name.to_string(),
-                reason: "Function not found".to_string(),
-            })?;
-
-        // Convert parameters to Wasmer values
-        let wasmer_params: Vec<Value> = params.iter().map(|&p| Value::I32(p)).collect();
-
-        // Call the function
-        let mut store = self.store.lock().unwrap();
-        let results =
-            function
-                .call(&mut *store, &wasmer_params)
-                .map_err(|e| Error::FunctionCall {
-                    function_name: function_name.to_string(),
-                    reason: e.to_string(),
-                })?;
-
-        // Extract the result
-        if let Some(Value::I32(result)) = results.first() {
-            Ok(*result)
-        } else {
+        self.ask(|reply| StoreRequest::Call {
+            function_name: function_name.to_string(),
+            params: params.to_vec(),
+            reply,
+        })
+        .unwrap_or_else(|| {
             Err(Error::FunctionCall {
                 function_name: function_name.to_string(),
-                reason: "Function did not return an i32".to_string(),
+                reason: "Wasmer store thread is no longer running".to_string(),
             })
-        }
+        })
     }
 }
 
@@ -396,31 +461,21 @@ impl WasmRuntime for WasmerRuntime {
                     instance_id: None,
                 })?;
 
-        // Create store
-        let mut store = Store::new(self.engine.clone());
-
         // Create WASI environment (simplified for now)
         self.create_wasi_env(&capabilities)?;
 
-        // Create imports (empty for now - we'll add WASI imports later)
-        let imports = imports! {};
-
-        // Create instance
-        let instance = Instance::new(&mut store, &wasmer_module.module, &imports).map_err(|e| {
-            Error::InstanceCreation {
-                reason: e.to_string(),
-                instance_id: Some(module.id().as_uuid()),
-            }
-        })?;
+        // Instantiate on the thread that will own the (non-Send) store
+        let wasmer_instance = WasmerInstance::new(
+            self.engine.clone(),
+            wasmer_module.module.clone(),
+            module.id(),
+        )?;
 
         // Update metrics
         {
             let mut metrics = self.metrics.write().unwrap();
             metrics.active_instances += 1;
         }
-
-        // Create our instance wrapper
-        let wasmer_instance = WasmerInstance::new(store, instance, module.id())?;
 
         Ok(Box::new(wasmer_instance))
     }

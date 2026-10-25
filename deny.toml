@@ -4,6 +4,15 @@ all-features = true
 
 [advisories]
 version = 2
+# All four are "unmaintained" notices, not vulnerabilities, and all are transitive through
+# wasmer / wasmtime. Acknowledged 2026-10-25; drop each ignore when upstream moves off it
+# (tracked in ROADMAP.md).
+ignore = [
+    { id = "RUSTSEC-2025-0141", reason = "bincode unmaintained, transitive via wasmer; https://rustsec.org/advisories/RUSTSEC-2025-0141" },
+    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained, transitive; https://rustsec.org/advisories/RUSTSEC-2024-0436" },
+    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 unmaintained, transitive; https://rustsec.org/advisories/RUSTSEC-2026-0173" },
+    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml unmaintained, transitive; https://rustsec.org/advisories/RUSTSEC-2024-0449" },
+]
 
 [licenses]
 version = 2

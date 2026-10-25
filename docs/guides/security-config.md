@@ -2,560 +2,208 @@
 
 📖 **[← Back to Documentation](../README.md)** | 🏠 **[← Main README](../../README.md)** | 🚀 **[API Reference](https://docs.rs/wasm-sandbox)**
 
-This guide covers how to configure wasm-sandbox's security features to create safe, isolated environments for running untrusted code.
+This guide covers how to configure wasm-sandbox's security settings: capabilities, resource limits and audit logging.
 
-## Security Philosophy
+> **Corrected 2026-10-25.** Earlier versions of this guide documented an API that was never implemented
+> (`NetworkCapability::Connect`/`Listen`, list-valued `Capabilities` fields, `FilesystemCapability::ReadOnly(..)`,
+> `SecurityProfile`, `TenantConfig`, `AuditConfig` on the builder, security callbacks). Those are gone from
+> this page; see [#8](https://github.com/ciresnave/wasm-sandbox/issues/8). Everything below is checked against
+> the code and the runnable [`examples/security_config.rs`](../../examples/security_config.rs), which CI compiles.
 
-wasm-sandbox follows a **defense-in-depth** approach with multiple layers of security:
+## What is enforced today
 
-1. **WebAssembly Isolation** - Code runs in a memory-safe WebAssembly sandbox
-2. **Capability-Based Security** - Explicit permission grants for system access
-3. **Resource Limits** - Prevent resource exhaustion attacks
-4. **Runtime Controls** - Monitor and control execution behavior
+WebAssembly itself isolates a module's memory and gives it no host access unless the host provides some.
+wasm-sandbox builds a WASI context per instance and does not add anything to it that you did not ask for.
+How much of your `Capabilities` is *applied* depends on the field (wasmtime backend, 0.5.x):
 
-## Quick Start - Secure Defaults
+| Setting | Applied to the instance? |
+|---|---|
+| `environment` | **Yes.** Only the variables your `EnvironmentCapability` allows are passed to the guest. |
+| `filesystem` | **No.** The directory lists are accepted, but the backend only logs "Directory access capabilities are not yet fully implemented"; no directory is opened to the guest. |
+| `network` | **No.** The value is stored but the runtime never reads it; no sockets are given to the guest. |
+| `process`, `time`, `random`, `custom` | Stored only; not applied. |
+| `ResourceLimits::fuel` | **Yes** for the wasmtime backend: fuel is set when the instance is created. |
 
-The simplest configuration provides strong security out of the box:
+Because the guest is given no directories and no sockets to begin with, **an unapplied grant fails closed**:
+the module simply cannot reach the file or host you "granted". It does not fail open. If you need a guest to
+read files or open connections today, this crate does not provide that yet; see the roadmap in
+[`ROADMAP.md`](../../ROADMAP.md). The other `ResourceLimits` fields exist in the type; this guide does not
+claim they are enforced.
+
+## Quick start - secure defaults
 
 ```rust
 use wasm_sandbox::WasmSandbox;
 
-// Secure by default - no filesystem, network, or excessive resource access
-let sandbox = WasmSandbox::from_source("untrusted_code.rs").await?;
+let mut sandbox = WasmSandbox::new()?;
+let module_id = sandbox.load_module(&wasm_bytes)?;
+// `None` means the default `InstanceConfig`, which uses `Capabilities::minimal()`.
+let instance_id = sandbox.create_instance(module_id, None)?;
 ```
 
-**Default Security Settings:**
+`Capabilities::minimal()` is the most restrictive set: no network, no filesystem directories, no environment
+variables, no process creation, read-only time, pseudo-random only.
+`Capabilities::development()` is a looser preset (loopback network, the current directory readable, the
+temp directory writable, a short environment allow-list) meant for local development, not production.
 
-- ❌ **No filesystem access** (read or write)
-- ❌ **No network access** (inbound or outbound)
-- ✅ **Memory limited** to 16MB
-- ✅ **Execution timeout** of 30 seconds
-- ✅ **Computational limits** via fuel metering
+## Capabilities
 
-## Capability-Based Security
-
-Grant specific permissions only when needed:
+`Capabilities` has one field per capability *kind*. Each field is a single value (an enum or a struct), not a
+list. Build it from `Capabilities::minimal()` and override only what you need:
 
 ```rust
-use wasm_sandbox::{WasmSandbox, Capabilities, FilesystemCapability, NetworkCapability};
-
-let sandbox = WasmSandbox::builder()
-    .source("file_processor.rs")
-    .capabilities(Capabilities {
-        filesystem: vec![
-            FilesystemCapability::ReadOnly("/input".into()),
-            FilesystemCapability::WriteOnly("/output".into()),
-        ],
-        network: vec![
-            NetworkCapability::Connect("api.example.com:443".into()),
-        ],
-        ..Capabilities::minimal()
-    })
-    .build()
-    .await?;
-```
-
-### Filesystem Capabilities
-
-Control file system access with granular permissions:
-
-```rust
-use wasm_sandbox::{FilesystemCapability, PathPattern};
+use wasm_sandbox::security::Capabilities;
+use wasm_sandbox::{EnvironmentCapability, NetworkCapability};
 
 let capabilities = Capabilities {
-    filesystem: vec![
-        // Read-only access to input directory
-        FilesystemCapability::ReadOnly("/app/input".into()),
-        
-        // Write-only access to output directory
-        FilesystemCapability::WriteOnly("/app/output".into()),
-        
-        // Read-only access to specific configuration file
-        FilesystemCapability::ReadOnly("/app/config.json".into()),
-        
-        // Temporary directory with read-write access
-        FilesystemCapability::ReadWrite("/tmp/sandbox".into()),
-        
-        // Pattern-based access (glob patterns supported)
-        FilesystemCapability::ReadOnly("/app/data/*.json".into()),
-    ],
+    network: NetworkCapability::Loopback,
+    environment: EnvironmentCapability::Allowlist(vec!["API_KEY".to_string()]),
     ..Capabilities::minimal()
 };
 ```
 
-### Network Capabilities
-
-Control network access to specific endpoints:
+Pass it to an instance through `InstanceConfig`:
 
 ```rust
-use wasm_sandbox::NetworkCapability;
+use wasm_sandbox::InstanceConfig;
 
-let capabilities = Capabilities {
-    network: vec![
-        // Allow HTTPS connections to API
-        NetworkCapability::Connect("api.example.com:443".into()),
-        
-        // Allow HTTP connections to specific service
-        NetworkCapability::Connect("localhost:8080".into()),
-        
-        // Allow connections to any port on localhost
-        NetworkCapability::Connect("localhost:*".into()),
-        
-        // Allow listening on specific port (for servers)
-        NetworkCapability::Listen("0.0.0.0:3000".into()),
-    ],
-    ..Capabilities::minimal()
+let instance_id = sandbox.create_instance(
+    module_id,
+    Some(InstanceConfig { capabilities, ..Default::default() }),
+)?;
+```
+
+### Network (`NetworkCapability`)
+
+A single enum value:
+
+| Variant | Meaning |
+|---|---|
+| `None` | No network access (the default). |
+| `Loopback` | Localhost only. |
+| `AllowedHosts(Vec<HostSpec>)` | Specific hosts; `HostSpec { host, ports: Option<PortRange>, secure }`. |
+| `AllowedPorts(Vec<PortRange>)` | Specific ports; `PortRange::new(start, end)`. |
+| `Full` | Unrestricted. |
+
+```rust
+use wasm_sandbox::security::{HostSpec, PortRange};
+
+let network = NetworkCapability::AllowedHosts(vec![HostSpec {
+    host: "api.example.com".to_string(),
+    ports: Some(PortRange::new(443, 443)),
+    secure: true,
+}]);
+```
+
+There is no separate "connect" and "listen" permission: `NetworkCapability::Connect` and `::Listen` do not
+exist. As the table above says, the network value is not yet applied by the runtime.
+
+### Filesystem (`FilesystemCapability`)
+
+A struct, not a list of rules:
+
+```rust
+use wasm_sandbox::FilesystemCapability;
+
+let filesystem = FilesystemCapability {
+    readable_dirs: vec!["./input".into()],
+    writable_dirs: vec!["./output".into()],
+    max_file_size: Some(10 * 1024 * 1024),
+    allow_create: true,
+    allow_delete: false,
 };
 ```
 
-### Environment Variable Access
+There are no per-file rules and no glob patterns. Not yet applied (see the table).
 
-Control access to environment variables:
+### Environment variables (`EnvironmentCapability`)
+
+`None`, `Allowlist(Vec<String>)`, `Denylist(Vec<String>)` or `Full`. This one is applied: with `Allowlist`,
+only the named variables that exist in the host environment are passed to the guest.
+
+## Resource limits
+
+`ResourceLimits` groups `memory`, `cpu`, `io`, `time` and `fuel`:
 
 ```rust
-use wasm_sandbox::EnvironmentCapability;
+use wasm_sandbox::security::ResourceLimits;
 
-let capabilities = Capabilities {
-    environment: vec![
-        // Allow reading specific environment variables
-        EnvironmentCapability::Read("API_KEY".into()),
-        EnvironmentCapability::Read("DATABASE_URL".into()),
-        
-        // Allow setting temporary variables
-        EnvironmentCapability::Write("TEMP_DIR".into()),
-    ],
-    ..Capabilities::minimal()
+use wasm_sandbox::CpuLimits;
+
+let limits = ResourceLimits {
+    fuel: Some(1_000_000), // instruction budget (applied, wasmtime backend)
+    cpu: CpuLimits { max_execution_time_ms: 2_000, ..CpuLimits::default() },
+    ..ResourceLimits::default()
 };
 ```
 
-## Resource Limits
+Set it on `InstanceConfig::resource_limits`. Fuel counts executed WebAssembly instructions, so it bounds
+computation independent of wall-clock time; `None` disables the budget. The default is 10,000,000.
 
-Prevent resource exhaustion with configurable limits:
+The high-level builder (`WasmSandbox::builder()`) has only a few simple switches: `source`, `timeout_duration`,
+`memory_limit`, `enable_file_access` and `enable_network`. It has no `.capabilities(..)` or
+`.resource_limits(..)` method; use `InstanceConfig` as shown above for full control.
 
-```rust
-use wasm_sandbox::ResourceLimits;
-use std::time::Duration;
+## Audit logging
 
-let sandbox = WasmSandbox::builder()
-    .source("resource_intensive.rs")
-    .resource_limits(ResourceLimits {
-        // Memory limits
-        memory_bytes: Some(128 * 1024 * 1024), // 128MB max memory
-        
-        // Execution limits
-        execution_timeout: Some(Duration::from_secs(60)), // 60 second timeout
-        max_fuel: Some(10_000_000), // Computational limit
-        
-        // I/O limits
-        max_file_size: Some(10 * 1024 * 1024), // 10MB file size limit
-        max_open_files: Some(100), // Maximum 100 open files
-        
-        // Network limits
-        max_connections: Some(10), // Maximum 10 concurrent connections
-        network_timeout: Some(Duration::from_secs(30)), // 30 second network timeout
-        
-        ..ResourceLimits::default()
-    })
-    .build()
-    .await?;
-```
-
-### Understanding Fuel
-
-Fuel is a mechanism to limit computational resources:
+`wasm_sandbox::security::audit` provides an in-memory `AuditLogger` you can use to record your own events:
 
 ```rust
-// High fuel limit for complex operations
-.max_fuel(Some(50_000_000))  // ~50M instructions
+use wasm_sandbox::security::audit::{AuditEventType, AuditLogger};
 
-// Low fuel limit for simple operations
-.max_fuel(Some(1_000_000))   // ~1M instructions
-
-// No fuel limit (use with extreme caution)
-.max_fuel(None)
+let logger = AuditLogger::new(1000).with_stdout(); // keep the last 1000 events
+logger.warning(
+    AuditEventType::Custom {
+        event_type: "fuel".to_string(),
+        data: "instance near fuel limit".to_string(),
+    },
+    "instance near fuel limit",
+);
+let events = logger.get_events();
 ```
 
-**Fuel Guidelines:**
+`AuditEventType` also has variants for module loads, instance creation, function calls, resource-limit hits and capability violations. The runtime does not currently write
+audit events for you, and there is no security callback or tenant isolation API.
 
-- **Simple calculations**: 1,000 - 10,000 fuel
-- **File processing**: 100,000 - 1,000,000 fuel
-- **Complex algorithms**: 1,000,000 - 10,000,000 fuel
-- **Machine learning**: 10,000,000+ fuel
+## Handling errors
 
-## Security Profiles
-
-Use predefined security profiles for common scenarios:
-
-### Minimal Security (Maximum Isolation)
+Failures are `wasm_sandbox::Error` (an alias of `SandboxError`); match the variants you care about, for
+example `SecurityViolation { .. }`, `ResourceExhausted { kind, limit, used, .. }`, `Timeout { .. }` and
+`FunctionCall { .. }`:
 
 ```rust
-use wasm_sandbox::SecurityProfile;
+use wasm_sandbox::SandboxError;
 
-let sandbox = WasmSandbox::builder()
-    .source("untrusted_code.rs")
-    .security_profile(SecurityProfile::Minimal)
-    .build()
-    .await?;
-```
-
-**Minimal Profile:**
-
-- No filesystem access
-- No network access
-- No environment variables
-- 16MB memory limit
-- 30 second timeout
-- 1M fuel limit
-
-### File Processing Profile
-
-```rust
-let sandbox = WasmSandbox::builder()
-    .source("file_processor.rs")
-    .security_profile(SecurityProfile::FileProcessing {
-        input_dir: "/input".into(),
-        output_dir: "/output".into(),
-        max_file_size: 100 * 1024 * 1024, // 100MB
-    })
-    .build()
-    .await?;
-```
-
-### Web Service Profile
-
-```rust
-let sandbox = WasmSandbox::builder()
-    .source("web_service.rs")
-    .security_profile(SecurityProfile::WebService {
-        allowed_hosts: vec!["api.example.com".into(), "database.local".into()],
-        listen_port: 3000,
-    })
-    .build()
-    .await?;
-```
-
-## Runtime Security Monitoring
-
-Monitor security events during execution:
-
-```rust
-use wasm_sandbox::{SecurityEvent, SecurityViolation};
-
-// Enable security monitoring
-let sandbox = WasmSandbox::builder()
-    .source("monitored_code.rs")
-    .enable_security_monitoring(true)
-    .security_callback(|event: SecurityEvent| {
-        match event {
-            SecurityEvent::Violation(violation) => {
-                match violation {
-                    SecurityViolation::UnauthorizedFileAccess { path } => {
-                        eprintln!("🚨 Unauthorized file access: {}", path);
-                    }
-                    SecurityViolation::UnauthorizedNetworkAccess { address } => {
-                        eprintln!("🚨 Unauthorized network access: {}", address);
-                    }
-                    SecurityViolation::ResourceLimitExceeded { resource, limit } => {
-                        eprintln!("🚨 Resource limit exceeded: {} > {}", resource, limit);
-                    }
-                }
-            }
-            SecurityEvent::CapabilityUsed { capability } => {
-                println!("ℹ️ Capability used: {:?}", capability);
-            }
-        }
-    })
-    .build()
-    .await?;
-```
-
-## Security Auditing
-
-Enable comprehensive security auditing:
-
-```rust
-use wasm_sandbox::AuditConfig;
-
-let sandbox = WasmSandbox::builder()
-    .source("audited_code.rs")
-    .audit_config(AuditConfig {
-        log_all_operations: true,
-        log_resource_usage: true,
-        log_capability_usage: true,
-        audit_file: Some("/var/log/wasm-sandbox-audit.log".into()),
-    })
-    .build()
-    .await?;
-```
-
-**Audit Log Format:**
-
-```json
-{
-  "timestamp": "2025-07-12T10:30:00Z",
-  "sandbox_id": "sb-123456",
-  "event_type": "filesystem_access",
-  "details": {
-    "operation": "read",
-    "path": "/input/data.json",
-    "size": 1024,
-    "allowed": true
-  }
-}
-```
-
-## Multi-Tenant Security
-
-Isolate multiple tenants safely:
-
-```rust
-use wasm_sandbox::{TenantConfig, TenantId};
-
-// Create tenant-isolated sandboxes
-let tenant_a_sandbox = WasmSandbox::builder()
-    .source("tenant_code.rs")
-    .tenant_config(TenantConfig {
-        tenant_id: TenantId::new("tenant-a"),
-        isolation_level: IsolationLevel::Strong,
-        resource_quota: ResourceQuota::new()
-            .memory_mb(64)
-            .cpu_percent(25)
-            .disk_mb(100),
-    })
-    .build()
-    .await?;
-```
-
-## Security Best Practices
-
-### 1. Principle of Least Privilege
-
-```rust
-// ❌ Don't grant broad access
-let bad_capabilities = Capabilities {
-    filesystem: vec![FilesystemCapability::ReadWrite("/".into())], // Too broad!
-    ..Capabilities::minimal()
-};
-
-// ✅ Grant specific, minimal access
-let good_capabilities = Capabilities {
-    filesystem: vec![
-        FilesystemCapability::ReadOnly("/app/input/specific-file.json".into()),
-        FilesystemCapability::WriteOnly("/app/output/result.json".into()),
-    ],
-    ..Capabilities::minimal()
-};
-```
-
-### 2. Always Set Resource Limits
-
-```rust
-// ❌ Don't leave resources unlimited
-let risky_sandbox = WasmSandbox::builder()
-    .source("untrusted.rs")
-    .build().await?; // Uses defaults, but better to be explicit
-
-// ✅ Explicitly set appropriate limits
-let safe_sandbox = WasmSandbox::builder()
-    .source("untrusted.rs")
-    .memory_limit(32 * 1024 * 1024)        // 32MB
-    .timeout_duration(Duration::from_secs(10)) // 10 seconds
-    .max_fuel(Some(1_000_000))             // 1M instructions
-    .build().await?;
-```
-
-### 3. Validate Input and Output
-
-```rust
-use serde::{Deserialize, Serialize};
-
-#[derive(Deserialize)]
-struct ValidatedInput {
-    #[serde(deserialize_with = "validate_string_length")]
-    data: String,
-    
-    #[serde(deserialize_with = "validate_positive_number")]
-    count: u32,
-}
-
-// Always validate data going into and coming out of the sandbox
-fn validate_string_length<'de, D>(deserializer: D) -> Result<String, D::Error> 
-where 
-    D: serde::Deserializer<'de> 
-{
-    let s = String::deserialize(deserializer)?;
-    if s.len() > 1000 {
-        return Err(serde::de::Error::custom("String too long"));
+match sandbox.call_function::<_, i32>(instance_id, "process", &input).await {
+    Ok(result) => handle(result),
+    Err(SandboxError::ResourceExhausted { kind, used, limit, .. }) => {
+        eprintln!("{kind:?} exhausted: {used}/{limit}");
     }
-    Ok(s)
+    Err(e) => return Err(e),
 }
 ```
 
-### 4. Handle Security Violations Gracefully
+## Best practices
 
-```rust
-match sandbox.call("process_data", &input).await {
-    Ok(result) => {
-        // Success - process result
-        handle_success(result).await
-    }
-    Err(Error::Security(SecurityViolation::UnauthorizedFileAccess { path })) => {
-        // Log security incident
-        security_logger.log_incident(&path).await;
-        
-        // Return safe error to user
-        Err("Operation not permitted".into())
-    }
-    Err(Error::ResourceLimit { kind, used, limit }) => {
-        // Log resource exhaustion
-        metrics.record_resource_limit_hit(&kind, used, limit).await;
-        
-        // Possibly retry with different limits or reject
-        Err("Resource limit exceeded".into())
-    }
-    Err(e) => {
-        // Handle other errors
-        Err(e.into())
-    }
-}
-```
+1. **Least privilege.** Start from `Capabilities::minimal()` and name only what the module needs.
+2. **Set a fuel budget** you can justify; never leave untrusted code on `fuel: None`.
+3. **Validate input and output** of every call; the sandbox protects the host, not your data.
+4. **Do not rely on an unapplied capability for safety in either direction.** Today filesystem and network
+   grants do nothing, so test the behaviour you depend on rather than the configuration you wrote.
 
-## Security Checklist
+## Checklist before production
 
-Before deploying to production:
+- [ ] Capabilities start from `minimal()` and each override is justified
+- [ ] A fuel budget is set on every instance running untrusted code
+- [ ] Inputs and outputs are validated
+- [ ] You tested what the guest can and cannot do (not just what the config says)
 
-### ✅ Capability Configuration
+## Security updates
 
-- [ ] Filesystem access limited to specific paths
-- [ ] Network access limited to required endpoints
-- [ ] Environment variables limited to necessary ones
-- [ ] No unnecessary capabilities granted
+Subscribe to repository security advisories, read the [CHANGELOG](../../CHANGELOG.md) for security-related
+changes, and re-test your security boundaries after upgrades.
 
-### ✅ Resource Limits
+## Next steps
 
-- [ ] Memory limits appropriate for workload
-- [ ] Execution timeouts prevent infinite loops
-- [ ] File size limits prevent DoS attacks
-- [ ] Network timeouts configured
-
-### ✅ Monitoring and Auditing
-
-- [ ] Security monitoring enabled
-- [ ] Audit logging configured
-- [ ] Violation handling implemented
-- [ ] Metrics collection enabled
-
-### ✅ Testing
-
-- [ ] Security boundaries tested
-- [ ] Resource limits tested
-- [ ] Violation scenarios tested
-- [ ] Performance under limits tested
-
-## Common Security Patterns
-
-### Pattern 1: File Processing Service
-
-```rust
-async fn create_file_processor_sandbox(
-    input_dir: &str,
-    output_dir: &str,
-) -> Result<WasmSandbox> {
-    WasmSandbox::builder()
-        .source("file_processor.rs")
-        .capabilities(Capabilities {
-            filesystem: vec![
-                FilesystemCapability::ReadOnly(input_dir.into()),
-                FilesystemCapability::WriteOnly(output_dir.into()),
-            ],
-            ..Capabilities::minimal()
-        })
-        .resource_limits(ResourceLimits {
-            memory_bytes: Some(128 * 1024 * 1024), // 128MB
-            execution_timeout: Some(Duration::from_secs(300)), // 5 minutes
-            max_file_size: Some(50 * 1024 * 1024), // 50MB files
-            max_open_files: Some(50),
-            ..ResourceLimits::default()
-        })
-        .build()
-        .await
-}
-```
-
-### Pattern 2: API Client Sandbox
-
-```rust
-async fn create_api_client_sandbox(allowed_hosts: Vec<String>) -> Result<WasmSandbox> {
-    let network_capabilities = allowed_hosts
-        .into_iter()
-        .map(|host| NetworkCapability::Connect(format!("{}:443", host).into()))
-        .collect();
-
-    WasmSandbox::builder()
-        .source("api_client.rs")
-        .capabilities(Capabilities {
-            network: network_capabilities,
-            environment: vec![
-                EnvironmentCapability::Read("API_KEY".into()),
-            ],
-            ..Capabilities::minimal()
-        })
-        .resource_limits(ResourceLimits {
-            memory_bytes: Some(64 * 1024 * 1024), // 64MB
-            execution_timeout: Some(Duration::from_secs(60)), // 1 minute
-            network_timeout: Some(Duration::from_secs(30)), // 30 second requests
-            max_connections: Some(5),
-            ..ResourceLimits::default()
-        })
-        .build()
-        .await
-}
-```
-
-## Troubleshooting Security Issues
-
-### Common Security Errors
-
-**Unauthorized File Access:**
-
-```
-Error: Security violation: Unauthorized file access to '/etc/passwd'
-```
-
-**Solution:** Add appropriate filesystem capability or review code for unauthorized access.
-
-**Resource Limit Exceeded:**
-
-```
-Error: Memory limit exceeded: used 134217728, limit 67108864
-```
-
-**Solution:** Increase memory limit or optimize code to use less memory.
-
-**Network Access Denied:**
-
-```
-Error: Security violation: Unauthorized network access to 'malicious.com:80'
-```
-
-**Solution:** Review code for unauthorized network calls or add necessary network capabilities.
-
-## Security Updates
-
-Stay informed about security updates:
-
-- **Subscribe to security advisories** in the GitHub repository
-- **Review changelog** for security-related changes
-- **Update regularly** to get latest security patches
-- **Test security boundaries** after updates
-
----
-
-**Remember:** Security is a process, not a destination. Regularly review and update your security configuration as your application evolves.
-
-## Next Steps
-
-- **[Resource Management Guide](resource-management.md)** - Optimize resource usage
-- **[Production Deployment](production.md)** - Deploy securely to production
-- **[Error Handling Guide](error-handling.md)** - Handle security violations gracefully
-- **[Plugin Development](plugin-development.md)** - Build secure plugin systems
+- **[Error Handling Guide](error-handling.md)**
+- **[API reference](https://docs.rs/wasm-sandbox)**

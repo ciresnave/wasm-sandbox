@@ -14,29 +14,28 @@ impl WrapperGenerator for GenericGenerator {
         // Generate the wrapper code
         self.generate_code(spec)
     }
-    
+
     fn compile_wrapper(&self, code: &str, output_path: &Path) -> Result<()> {
         // Create a temporary directory for building
-        let temp_dir = tempfile::tempdir()
-            .map_err(|e| Error::WrapperGeneration { 
-                reason: format!("Failed to create temporary directory: {}", e),
-                wrapper_type: Some("generic".to_string()),
-            })?;
-        
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::WrapperGeneration {
+            reason: format!("Failed to create temporary directory: {}", e),
+            wrapper_type: Some("generic".to_string()),
+        })?;
+
         // Write code to a temporary file
         let src_path = temp_dir.path().join("src/main.rs");
-        std::fs::create_dir_all(src_path.parent().unwrap())
-            .map_err(|e| Error::WrapperGeneration { 
+        std::fs::create_dir_all(src_path.parent().unwrap()).map_err(|e| {
+            Error::WrapperGeneration {
                 reason: format!("Failed to create source directory: {}", e),
                 wrapper_type: Some("generic".to_string()),
-            })?;
-            
-        std::fs::write(&src_path, code)
-            .map_err(|e| Error::WrapperGeneration {
-                reason: format!("Failed to write source code: {}", e),
-                wrapper_type: Some("generic".to_string()),
-            })?;
-            
+            }
+        })?;
+
+        std::fs::write(&src_path, code).map_err(|e| Error::WrapperGeneration {
+            reason: format!("Failed to write source code: {}", e),
+            wrapper_type: Some("generic".to_string()),
+        })?;
+
         // Create Cargo.toml
         let cargo_toml = r#"[package]
 name = "generic-wrapper"
@@ -51,14 +50,16 @@ tokio = { version = "1.0", features = ["full"] }
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
-"#.to_string();
-        
-        std::fs::write(temp_dir.path().join("Cargo.toml"), cargo_toml)
-            .map_err(|e| Error::WrapperGeneration {
+"#
+        .to_string();
+
+        std::fs::write(temp_dir.path().join("Cargo.toml"), cargo_toml).map_err(|e| {
+            Error::WrapperGeneration {
                 reason: format!("Failed to write Cargo.toml: {}", e),
                 wrapper_type: Some("generic".to_string()),
-            })?;
-            
+            }
+        })?;
+
         // Run cargo build
         let status = Command::new("cargo")
             .current_dir(temp_dir.path())
@@ -68,24 +69,24 @@ tracing-subscriber = "0.3"
                 reason: format!("Failed to run cargo build: {}", e),
                 wrapper_type: Some("generic".to_string()),
             })?;
-            
+
         if !status.success() {
             return Err(Error::WrapperGeneration {
                 reason: "Cargo build failed".to_string(),
                 wrapper_type: Some("generic".to_string()),
             });
         }
-        
+
         // Copy the output file
-        let wasm_path = temp_dir.path()
+        let wasm_path = temp_dir
+            .path()
             .join("target/wasm32-wasi/release/generic-wrapper.wasm");
-            
-        std::fs::copy(wasm_path, output_path)
-            .map_err(|e| Error::WrapperGeneration {
-                reason: format!("Failed to copy output file: {}", e),
-                wrapper_type: Some("generic".to_string()),
-            })?;
-            
+
+        std::fs::copy(wasm_path, output_path).map_err(|e| Error::WrapperGeneration {
+            reason: format!("Failed to copy output file: {}", e),
+            wrapper_type: Some("generic".to_string()),
+        })?;
+
         Ok(())
     }
 }
@@ -95,20 +96,27 @@ impl GenericGenerator {
     fn generate_code(&self, spec: &WrapperSpec) -> Result<String> {
         let app_path = spec.app_path.to_string_lossy();
         let args = spec.arguments.join("\", \"");
-        
+
         // Format environment variables
-        let env_vars = spec.environment.iter()
-            .map(|(k, v)| format!("        env_map.insert(\"{}\".to_string(), \"{}\".to_string());", k, v))
+        let env_vars = spec
+            .environment
+            .iter()
+            .map(|(k, v)| {
+                format!(
+                    "        env_map.insert(\"{}\".to_string(), \"{}\".to_string());",
+                    k, v
+                )
+            })
             .collect::<Vec<_>>()
             .join("\n");
-            
+
         // Generate custom template variables
         let mut custom_vars = String::new();
         for (key, value) in &spec.template_variables {
             custom_vars.push_str(&format!("    // Custom variable: {}\n", key));
             custom_vars.push_str(&format!("    let {} = \"{}\";\n", key, value));
         }
-            
+
         let code = format!(
             r#"//! Generic wrapper for WASM sandbox
 
@@ -216,7 +224,7 @@ async fn run_application(
             env_vars = env_vars,
             custom_vars = custom_vars,
         );
-        
+
         Ok(code)
     }
 }

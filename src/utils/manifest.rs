@@ -1,37 +1,37 @@
 //! Manifest parsing and validation
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result, SandboxError};
-use crate::security::{
-    Capabilities, NetworkCapability, FilesystemCapability, 
-    EnvironmentCapability, ProcessCapability, PortRange, HostSpec
-};
 use crate::runtime::RuntimeConfig;
+use crate::security::{
+    Capabilities, EnvironmentCapability, FilesystemCapability, HostSpec, NetworkCapability,
+    PortRange, ProcessCapability,
+};
+use serde::{Deserialize, Serialize};
 
 /// Sandbox manifest format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxManifest {
     /// Name of the application
     pub name: String,
-    
+
     /// Version of the application
     pub version: String,
-    
+
     /// Description of the application
     pub description: Option<String>,
-    
+
     /// Runtime configuration
     #[serde(default)]
     pub runtime: ManifestRuntime,
-    
+
     /// Security capabilities
     #[serde(default)]
     pub capabilities: ManifestCapabilities,
-    
+
     /// Resource limits
     #[serde(default)]
     pub resource_limits: ManifestResourceLimits,
@@ -42,15 +42,15 @@ pub struct SandboxManifest {
 pub struct ManifestRuntime {
     /// WebAssembly runtime engine
     pub engine: String,
-    
+
     /// Whether to enable debugging
     #[serde(default)]
     pub debug: bool,
-    
+
     /// Whether to cache compiled modules
     #[serde(default = "default_true")]
     pub cache_modules: bool,
-    
+
     /// Number of compilation threads
     #[serde(default = "default_threads")]
     pub compilation_threads: usize,
@@ -81,11 +81,11 @@ pub struct ManifestNetworkCapabilities {
     /// Network mode
     #[serde(default)]
     pub mode: String,
-    
+
     /// Allowed hosts
     #[serde(default)]
     pub allowed_hosts: Vec<String>,
-    
+
     /// Allowed ports
     #[serde(default)]
     pub allowed_ports: Vec<String>,
@@ -107,19 +107,19 @@ pub struct ManifestFilesystemCapabilities {
     /// Readable directories
     #[serde(default)]
     pub readable_dirs: Vec<String>,
-    
+
     /// Writable directories
     #[serde(default)]
     pub writable_dirs: Vec<String>,
-    
+
     /// Whether to allow file creation
     #[serde(default)]
     pub allow_create: bool,
-    
+
     /// Whether to allow file deletion
     #[serde(default)]
     pub allow_delete: bool,
-    
+
     /// Maximum file size
     pub max_file_size: Option<String>,
 }
@@ -142,7 +142,7 @@ pub struct ManifestEnvironmentCapabilities {
     /// Environment mode
     #[serde(default)]
     pub mode: String,
-    
+
     /// Environment variables
     #[serde(default)]
     pub vars: Vec<String>,
@@ -163,7 +163,7 @@ pub struct ManifestProcessCapabilities {
     /// Whether to allow process execution
     #[serde(default)]
     pub allow_execution: bool,
-    
+
     /// Allowed commands
     #[serde(default)]
     pub allowed_commands: Vec<String>,
@@ -184,27 +184,27 @@ pub struct ManifestCapabilities {
     /// Network capabilities
     #[serde(default)]
     pub network: ManifestNetworkCapabilities,
-    
+
     /// Filesystem capabilities
     #[serde(default)]
     pub filesystem: ManifestFilesystemCapabilities,
-    
+
     /// Environment capabilities
     #[serde(default)]
     pub environment: ManifestEnvironmentCapabilities,
-    
+
     /// Process capabilities
     #[serde(default)]
     pub process: ManifestProcessCapabilities,
-    
+
     /// Time capabilities
     #[serde(default)]
     pub time_mode: String,
-    
+
     /// Random number generator capabilities
     #[serde(default)]
     pub random_mode: String,
-    
+
     /// Custom capabilities
     #[serde(default)]
     pub custom: HashMap<String, String>,
@@ -229,7 +229,7 @@ impl Default for ManifestCapabilities {
 pub struct ManifestMemoryLimits {
     /// Maximum memory
     pub max_memory: Option<String>,
-    
+
     /// Reserved memory
     pub reserved_memory: Option<String>,
 }
@@ -248,10 +248,10 @@ impl Default for ManifestMemoryLimits {
 pub struct ManifestCpuLimits {
     /// Maximum execution time
     pub max_execution_time: Option<String>,
-    
+
     /// CPU usage percentage
     pub cpu_usage_percentage: Option<u8>,
-    
+
     /// Maximum threads
     pub max_threads: Option<u32>,
 }
@@ -271,10 +271,10 @@ impl Default for ManifestCpuLimits {
 pub struct ManifestIoLimits {
     /// Maximum read bytes
     pub max_read_bytes: Option<String>,
-    
+
     /// Maximum write bytes
     pub max_write_bytes: Option<String>,
-    
+
     /// Maximum open files
     pub max_open_files: Option<u32>,
 }
@@ -295,11 +295,11 @@ pub struct ManifestResourceLimits {
     /// Memory limits
     #[serde(default)]
     pub memory: ManifestMemoryLimits,
-    
+
     /// CPU limits
     #[serde(default)]
     pub cpu: ManifestCpuLimits,
-    
+
     /// I/O limits
     #[serde(default)]
     pub io: ManifestIoLimits,
@@ -318,32 +318,30 @@ impl Default for ManifestResourceLimits {
 impl SandboxManifest {
     /// Load a manifest from a file
     pub fn from_path(path: &Path) -> Result<Self> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| Error::Filesystem { 
-                operation: "read_manifest".to_string(), 
-                path: path.to_path_buf(),
-                reason: e.to_string() 
-            })?;
-        
+        let content = fs::read_to_string(path).map_err(|e| Error::Filesystem {
+            operation: "read_manifest".to_string(),
+            path: path.to_path_buf(),
+            reason: e.to_string(),
+        })?;
+
         Self::from_str(&content)
     }
-    
+
     /// Load a manifest from a string
     pub fn from_str(content: &str) -> Result<Self> {
         // Try to parse as TOML first
         if let Ok(manifest) = toml::from_str::<SandboxManifest>(content) {
             return Ok(manifest);
         }
-        
+
         // Try to parse as JSON
-        serde_json::from_str::<SandboxManifest>(content)
-            .map_err(|e| SandboxError::Configuration {
-                message: format!("Failed to parse manifest: {}", e),
-                suggestion: Some("Check manifest syntax - supports both TOML and JSON".to_string()),
-                field: Some("manifest".to_string()),
-            })
+        serde_json::from_str::<SandboxManifest>(content).map_err(|e| SandboxError::Configuration {
+            message: format!("Failed to parse manifest: {}", e),
+            suggestion: Some("Check manifest syntax - supports both TOML and JSON".to_string()),
+            field: Some("manifest".to_string()),
+        })
     }
-    
+
     /// Convert to runtime configuration
     pub fn to_runtime_config(&self) -> RuntimeConfig {
         RuntimeConfig {
@@ -356,7 +354,7 @@ impl SandboxManifest {
             cache_directory: None,
         }
     }
-    
+
     /// Convert to capabilities
     pub fn to_capabilities(&self) -> Result<Capabilities> {
         // Parse network capabilities
@@ -369,113 +367,161 @@ impl SandboxManifest {
                     // Parse host spec (format: "hostname:port" or "hostname:port-range")
                     let parts: Vec<&str> = host_spec.split(':').collect();
                     if parts.len() != 2 {
-                        return Err(SandboxError::config_error(format!("Invalid host spec: {}", host_spec), None));
+                        return Err(SandboxError::config_error(
+                            format!("Invalid host spec: {}", host_spec),
+                            None,
+                        ));
                     }
-                    
+
                     let host = parts[0].to_string();
                     let port_spec = parts[1];
-                    
+
                     let ports = if port_spec.contains('-') {
                         let port_parts: Vec<&str> = port_spec.split('-').collect();
                         if port_parts.len() != 2 {
-                            return Err(SandboxError::config_error(format!("Invalid port range: {}", port_spec), None));
+                            return Err(SandboxError::config_error(
+                                format!("Invalid port range: {}", port_spec),
+                                None,
+                            ));
                         }
-                        
-                        let start = port_parts[0].parse::<u16>()
-                            .map_err(|_| SandboxError::config_error(format!("Invalid port: {}", port_parts[0]), None))?;
-                        let end = port_parts[1].parse::<u16>()
-                            .map_err(|_| SandboxError::config_error(format!("Invalid port: {}", port_parts[1]), None))?;
-                        
+
+                        let start = port_parts[0].parse::<u16>().map_err(|_| {
+                            SandboxError::config_error(
+                                format!("Invalid port: {}", port_parts[0]),
+                                None,
+                            )
+                        })?;
+                        let end = port_parts[1].parse::<u16>().map_err(|_| {
+                            SandboxError::config_error(
+                                format!("Invalid port: {}", port_parts[1]),
+                                None,
+                            )
+                        })?;
+
                         Some(PortRange::new(start, end))
                     } else {
-                        let port = port_spec.parse::<u16>()
-                            .map_err(|_| SandboxError::config_error(format!("Invalid port: {}", port_spec), None))?;
-                        
+                        let port = port_spec.parse::<u16>().map_err(|_| {
+                            SandboxError::config_error(format!("Invalid port: {}", port_spec), None)
+                        })?;
+
                         Some(PortRange::single(port))
                     };
-                    
+
                     hosts.push(HostSpec {
                         host,
                         ports,
                         secure: true, // Allow secure connections by default
                     });
                 }
-                
+
                 NetworkCapability::AllowedHosts(hosts)
-            },
+            }
             "allowed_ports" => {
                 let mut ports = Vec::new();
                 for port_spec in &self.capabilities.network.allowed_ports {
                     if port_spec.contains('-') {
                         let port_parts: Vec<&str> = port_spec.split('-').collect();
                         if port_parts.len() != 2 {
-                            return Err(SandboxError::config_error(format!("Invalid port range: {}", port_spec), None));
+                            return Err(SandboxError::config_error(
+                                format!("Invalid port range: {}", port_spec),
+                                None,
+                            ));
                         }
-                        
-                        let start = port_parts[0].parse::<u16>()
-                            .map_err(|_| SandboxError::config_error(format!("Invalid port: {}", port_parts[0]), None))?;
-                        let end = port_parts[1].parse::<u16>()
-                            .map_err(|_| SandboxError::config_error(format!("Invalid port: {}", port_parts[1]), None))?;
-                        
+
+                        let start = port_parts[0].parse::<u16>().map_err(|_| {
+                            SandboxError::config_error(
+                                format!("Invalid port: {}", port_parts[0]),
+                                None,
+                            )
+                        })?;
+                        let end = port_parts[1].parse::<u16>().map_err(|_| {
+                            SandboxError::config_error(
+                                format!("Invalid port: {}", port_parts[1]),
+                                None,
+                            )
+                        })?;
+
                         ports.push(PortRange::new(start, end));
                     } else {
-                        let port = port_spec.parse::<u16>()
-                            .map_err(|_| SandboxError::config_error(format!("Invalid port: {}", port_spec), None))?;
-                        
+                        let port = port_spec.parse::<u16>().map_err(|_| {
+                            SandboxError::config_error(format!("Invalid port: {}", port_spec), None)
+                        })?;
+
                         ports.push(PortRange::single(port));
                     }
                 }
-                
+
                 NetworkCapability::AllowedPorts(ports)
-            },
+            }
             "full" => NetworkCapability::Full,
             _ => {
-                return Err(SandboxError::config_error(format!("Invalid network mode: {}", self.capabilities.network.mode), None));
+                return Err(SandboxError::config_error(
+                    format!("Invalid network mode: {}", self.capabilities.network.mode),
+                    None,
+                ));
             }
         };
-        
+
         // Parse filesystem capabilities
         let filesystem = FilesystemCapability {
-            readable_dirs: self.capabilities.filesystem.readable_dirs.iter()
+            readable_dirs: self
+                .capabilities
+                .filesystem
+                .readable_dirs
+                .iter()
                 .map(|s| PathBuf::from(s))
                 .collect(),
-            writable_dirs: self.capabilities.filesystem.writable_dirs.iter()
+            writable_dirs: self
+                .capabilities
+                .filesystem
+                .writable_dirs
+                .iter()
                 .map(|s| PathBuf::from(s))
                 .collect(),
-            max_file_size: self.capabilities.filesystem.max_file_size.as_ref()
+            max_file_size: self
+                .capabilities
+                .filesystem
+                .max_file_size
+                .as_ref()
                 .and_then(|s| parse_size(s).ok()),
             allow_create: self.capabilities.filesystem.allow_create,
             allow_delete: self.capabilities.filesystem.allow_delete,
         };
-        
+
         // Parse environment capabilities
         let environment = match self.capabilities.environment.mode.as_str() {
             "none" => EnvironmentCapability::None,
-            "allowlist" => EnvironmentCapability::Allowlist(
-                self.capabilities.environment.vars.clone()
-            ),
-            "denylist" => EnvironmentCapability::Denylist(
-                self.capabilities.environment.vars.clone()
-            ),
+            "allowlist" => {
+                EnvironmentCapability::Allowlist(self.capabilities.environment.vars.clone())
+            }
+            "denylist" => {
+                EnvironmentCapability::Denylist(self.capabilities.environment.vars.clone())
+            }
             "full" => EnvironmentCapability::Full,
             _ => {
-                return Err(SandboxError::config_error(format!("Invalid environment mode: {}", self.capabilities.environment.mode), None));
+                return Err(SandboxError::config_error(
+                    format!(
+                        "Invalid environment mode: {}",
+                        self.capabilities.environment.mode
+                    ),
+                    None,
+                ));
             }
         };
-        
+
         // Parse process capabilities
         let process = if self.capabilities.process.allow_execution {
             if self.capabilities.process.allowed_commands.is_empty() {
                 ProcessCapability::Full
             } else {
                 ProcessCapability::AllowedCommands(
-                    self.capabilities.process.allowed_commands.clone()
+                    self.capabilities.process.allowed_commands.clone(),
                 )
             }
         } else {
             ProcessCapability::None
         };
-        
+
         Ok(Capabilities {
             network,
             filesystem,
@@ -500,14 +546,17 @@ impl SandboxManifest {
 /// Parse a size string (e.g. "10MB") into bytes
 fn parse_size(size: &str) -> Result<u64> {
     let size = size.trim();
-    
+
     if size.is_empty() {
-        return Err(SandboxError::config_error("Empty size string".to_string(), None));
+        return Err(SandboxError::config_error(
+            "Empty size string".to_string(),
+            None,
+        ));
     }
-    
+
     let mut num_str = String::new();
     let mut suffix = String::new();
-    
+
     for c in size.chars() {
         if c.is_digit(10) || c == '.' {
             num_str.push(c);
@@ -515,23 +564,30 @@ fn parse_size(size: &str) -> Result<u64> {
             suffix.push(c);
         }
     }
-    
+
     if num_str.is_empty() {
-        return Err(SandboxError::config_error(format!("Invalid size format: {}", size), None));
+        return Err(SandboxError::config_error(
+            format!("Invalid size format: {}", size),
+            None,
+        ));
     }
-    
-    let num: f64 = num_str.parse()
+
+    let num: f64 = num_str
+        .parse()
         .map_err(|_| SandboxError::config_error(format!("Invalid number: {}", num_str), None))?;
-    
+
     let multiplier = match suffix.trim().to_uppercase().as_str() {
         "" | "B" => 1,
         "K" | "KB" => 1024,
         "M" | "MB" => 1024 * 1024,
         "G" | "GB" => 1024 * 1024 * 1024,
-        _ => return Err(SandboxError::config_error(format!("Invalid size suffix: {}", suffix), None)),
+        _ => {
+            return Err(SandboxError::config_error(
+                format!("Invalid size suffix: {}", suffix),
+                None,
+            ));
+        }
     };
-    
+
     Ok((num * multiplier as f64) as u64)
 }
-
-

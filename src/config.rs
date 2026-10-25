@@ -16,10 +16,18 @@ pub trait MemoryUnit {
 }
 
 impl MemoryUnit for u64 {
-    fn bytes(self) -> u64 { self }
-    fn kb(self) -> u64 { self * 1024 }
-    fn mb(self) -> u64 { self * 1024 * 1024 }
-    fn gb(self) -> u64 { self * 1024 * 1024 * 1024 }
+    fn bytes(self) -> u64 {
+        self
+    }
+    fn kb(self) -> u64 {
+        self * 1024
+    }
+    fn mb(self) -> u64 {
+        self * 1024 * 1024
+    }
+    fn gb(self) -> u64 {
+        self * 1024 * 1024 * 1024
+    }
 }
 
 /// Human-readable time units
@@ -30,9 +38,15 @@ pub trait TimeUnit {
 }
 
 impl TimeUnit for u64 {
-    fn millis(self) -> Duration { Duration::from_millis(self) }
-    fn seconds(self) -> Duration { Duration::from_secs(self) }
-    fn minutes(self) -> Duration { Duration::from_secs(self * 60) }
+    fn millis(self) -> Duration {
+        Duration::from_millis(self)
+    }
+    fn seconds(self) -> Duration {
+        Duration::from_secs(self)
+    }
+    fn minutes(self) -> Duration {
+        Duration::from_secs(self * 60)
+    }
 }
 
 /// Network policy for advanced capabilities
@@ -119,8 +133,7 @@ impl InstanceConfigBuilder {
 
     /// Set memory limit using human-readable units
     pub fn memory_limit<T: MemoryUnit>(mut self, amount: T) -> Self {
-        self.config.resource_limits.memory.max_memory_pages = 
-            (amount.bytes() / 65536) as u32; // WASM page size is 64KB
+        self.config.resource_limits.memory.max_memory_pages = (amount.bytes() / 65536) as u32; // WASM page size is 64KB
         self
     }
 
@@ -132,18 +145,16 @@ impl InstanceConfigBuilder {
 
     /// Allow filesystem read access to paths
     pub fn filesystem_read<P: AsRef<std::path::Path>>(mut self, paths: &[P]) -> Self {
-        self.advanced_caps.filesystem.read_paths = paths.iter()
-            .map(|p| p.as_ref().to_path_buf())
-            .collect();
+        self.advanced_caps.filesystem.read_paths =
+            paths.iter().map(|p| p.as_ref().to_path_buf()).collect();
         self.advanced_caps.filesystem.deny_all = false;
         self
     }
 
     /// Allow filesystem write access to paths
     pub fn filesystem_write<P: AsRef<std::path::Path>>(mut self, paths: &[P]) -> Self {
-        self.advanced_caps.filesystem.write_paths = paths.iter()
-            .map(|p| p.as_ref().to_path_buf())
-            .collect();
+        self.advanced_caps.filesystem.write_paths =
+            paths.iter().map(|p| p.as_ref().to_path_buf()).collect();
         self.advanced_caps.filesystem.deny_all = false;
         self
     }
@@ -164,9 +175,8 @@ impl InstanceConfigBuilder {
 
     /// Allow network access to specific domains
     pub fn network_allow_domains(mut self, domains: &[impl AsRef<str>]) -> Self {
-        self.advanced_caps.network.allowed_domains = domains.iter()
-            .map(|d| d.as_ref().to_string())
-            .collect();
+        self.advanced_caps.network.allowed_domains =
+            domains.iter().map(|d| d.as_ref().to_string()).collect();
         self.advanced_caps.network.deny_all = false;
         self
     }
@@ -186,7 +196,8 @@ impl InstanceConfigBuilder {
 
     /// Set CPU time limit
     pub fn cpu_time_limit<T: TimeUnit>(mut self, duration: T) -> Self {
-        self.config.resource_limits.cpu.max_execution_time_ms = duration.millis().as_millis() as u64;
+        self.config.resource_limits.cpu.max_execution_time_ms =
+            duration.millis().as_millis() as u64;
         self
     }
 
@@ -204,9 +215,7 @@ impl InstanceConfigBuilder {
 
     /// Allow access to environment variables
     pub fn env_vars(mut self, vars: &[impl AsRef<str>]) -> Self {
-        self.advanced_caps.env_vars = vars.iter()
-            .map(|v| v.as_ref().to_string())
-            .collect();
+        self.advanced_caps.env_vars = vars.iter().map(|v| v.as_ref().to_string()).collect();
         self
     }
 
@@ -226,12 +235,12 @@ impl InstanceConfigBuilder {
     pub fn build(self) -> Result<InstanceConfig> {
         // Validate configuration
         self.validate()?;
-        
+
         // Convert advanced capabilities to basic capabilities
         let converted_capabilities = self.convert_capabilities()?;
         let mut config = self.config;
         config.capabilities = converted_capabilities;
-        
+
         Ok(config)
     }
 
@@ -241,7 +250,7 @@ impl InstanceConfigBuilder {
         if self.config.resource_limits.memory.max_memory_pages == 0 {
             return Err(SandboxError::config_error(
                 "Memory limit cannot be zero",
-                Some("Use .memory_limit() to set a valid memory limit".to_string())
+                Some("Use .memory_limit() to set a valid memory limit".to_string()),
             ));
         }
 
@@ -249,7 +258,7 @@ impl InstanceConfigBuilder {
         if self.config.startup_timeout_ms == 0 {
             return Err(SandboxError::config_error(
                 "Timeout cannot be zero",
-                Some("Use .timeout() to set a valid timeout".to_string())
+                Some("Use .timeout() to set a valid timeout".to_string()),
             ));
         }
 
@@ -258,19 +267,19 @@ impl InstanceConfigBuilder {
             if !path.exists() {
                 return Err(SandboxError::config_error(
                     format!("Read path does not exist: {:?}", path),
-                    Some("Ensure all read paths exist before configuration".to_string())
+                    Some("Ensure all read paths exist before configuration".to_string()),
                 ));
             }
         }
 
         for path in &self.advanced_caps.filesystem.write_paths {
-            if let Some(parent) = path.parent() {
-                if !parent.exists() {
-                    return Err(SandboxError::config_error(
-                        format!("Write path parent directory does not exist: {:?}", parent),
-                        Some("Ensure parent directories exist before configuration".to_string())
-                    ));
-                }
+            if let Some(parent) = path.parent()
+                && !parent.exists()
+            {
+                return Err(SandboxError::config_error(
+                    format!("Write path parent directory does not exist: {:?}", parent),
+                    Some("Ensure parent directories exist before configuration".to_string()),
+                ));
             }
         }
 
@@ -279,14 +288,17 @@ impl InstanceConfigBuilder {
 
     /// Convert advanced capabilities to basic capabilities
     fn convert_capabilities(&self) -> Result<Capabilities> {
-        use crate::security::{NetworkCapability, EnvironmentCapability, ProcessCapability, FilesystemCapability};
-        
+        use crate::security::{
+            EnvironmentCapability, FilesystemCapability, NetworkCapability, ProcessCapability,
+        };
+
         let mut capabilities = Capabilities::minimal();
-        
+
         // Convert filesystem capabilities
-        if !self.advanced_caps.filesystem.deny_all && 
-           (!self.advanced_caps.filesystem.read_paths.is_empty() || 
-            !self.advanced_caps.filesystem.write_paths.is_empty()) {
+        if !self.advanced_caps.filesystem.deny_all
+            && (!self.advanced_caps.filesystem.read_paths.is_empty()
+                || !self.advanced_caps.filesystem.write_paths.is_empty())
+        {
             capabilities.filesystem = FilesystemCapability {
                 readable_dirs: self.advanced_caps.filesystem.read_paths.clone(),
                 writable_dirs: self.advanced_caps.filesystem.write_paths.clone(),
@@ -295,14 +307,18 @@ impl InstanceConfigBuilder {
                 allow_delete: !self.advanced_caps.filesystem.write_paths.is_empty(),
             };
         }
-        
+
         // Convert network capabilities
         if !self.advanced_caps.network.deny_all {
             if self.advanced_caps.network.loopback_only {
                 capabilities.network = NetworkCapability::Loopback;
             } else if !self.advanced_caps.network.allowed_domains.is_empty() {
                 use crate::security::HostSpec;
-                let hosts = self.advanced_caps.network.allowed_domains.iter()
+                let hosts = self
+                    .advanced_caps
+                    .network
+                    .allowed_domains
+                    .iter()
                     .map(|domain| HostSpec {
                         host: domain.clone(),
                         ports: None,
@@ -312,7 +328,11 @@ impl InstanceConfigBuilder {
                 capabilities.network = NetworkCapability::AllowedHosts(hosts);
             } else if !self.advanced_caps.network.allowed_ports.is_empty() {
                 use crate::security::PortRange;
-                let ports = self.advanced_caps.network.allowed_ports.iter()
+                let ports = self
+                    .advanced_caps
+                    .network
+                    .allowed_ports
+                    .iter()
                     .map(|&port| PortRange::single(port))
                     .collect();
                 capabilities.network = NetworkCapability::AllowedPorts(ports);
@@ -320,17 +340,18 @@ impl InstanceConfigBuilder {
                 capabilities.network = NetworkCapability::Full;
             }
         }
-        
+
         // Convert environment capabilities
         if !self.advanced_caps.env_vars.is_empty() {
-            capabilities.environment = EnvironmentCapability::Allowlist(self.advanced_caps.env_vars.clone());
+            capabilities.environment =
+                EnvironmentCapability::Allowlist(self.advanced_caps.env_vars.clone());
         }
-        
+
         // Convert process capabilities
         if self.advanced_caps.process_spawn {
             capabilities.process = ProcessCapability::Full;
         }
-        
+
         Ok(capabilities)
     }
 }
@@ -374,7 +395,7 @@ impl SandboxConfigBuilder {
     }
 
     /// Set runtime to use Wasmtime
-    /// 
+    ///
     /// Note: Runtime selection is determined at compile time by feature flags.
     /// This method is provided for API compatibility and will return self unchanged.
     /// To use Wasmtime, ensure the "wasmtime-runtime" feature is enabled (default).
@@ -384,7 +405,7 @@ impl SandboxConfigBuilder {
     }
 
     /// Set runtime to use Wasmer
-    /// 
+    ///
     /// Note: Runtime selection is determined at compile time by feature flags.
     /// This method is provided for API compatibility and will return self unchanged.
     /// To use Wasmer, enable the "wasmer-runtime" feature and disable "wasmtime-runtime".

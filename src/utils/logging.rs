@@ -1,8 +1,8 @@
 //! Structured logging
 
+use std::sync::Once;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::EnvFilter;
-use std::sync::Once;
 
 static INIT: Once = Once::new();
 
@@ -81,7 +81,12 @@ pub fn log_error(component: &str, error: &crate::error::Error) {
 }
 
 /// Log a custom event
-pub fn log_event(_target: &str, level: tracing::Level, _data: &[(&str, &dyn std::fmt::Display)], message: &str) {
+pub fn log_event(
+    _target: &str,
+    level: tracing::Level,
+    _data: &[(&str, &dyn std::fmt::Display)],
+    message: &str,
+) {
     // Use specific level macros instead of dynamic level
     match level {
         tracing::Level::ERROR => tracing::error!("{}", message),

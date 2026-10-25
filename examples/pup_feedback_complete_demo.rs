@@ -1,14 +1,14 @@
 //! Complete demonstration of PUP feedback implementation
 //! Shows the before/after comparison and all new features in action
 
-use wasm_sandbox::*;
-use wasm_sandbox::plugins::{ExecutionCategory, Dependency, DependencyType};
 use serde_json::json;
+use wasm_sandbox::plugins::{Dependency, DependencyType, ExecutionCategory};
+use wasm_sandbox::*;
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("🎯 PUP Feedback Response - Complete Implementation Demo\n");
-    
+
     // ================================
     // BEFORE: v0.2.0 (The Problems)
     // ================================
@@ -28,36 +28,38 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // 1. ONE-LINER EXECUTION - The simplest possible API
     println!("1️⃣  ONE-LINER EXECUTION:");
     println!("   // The simplest possible WebAssembly execution:");
-    println!("   let result: i32 = wasm_sandbox::simple::run(\"./calc.rs\", \"add\", &[5.into(), 3.into()]).await?;");
+    println!(
+        "   let result: i32 = wasm_sandbox::simple::run(\"./calc.rs\", \"add\", &[5.into(), 3.into()]).await?;"
+    );
     println!("   ✓ Auto-compiles from source, secure defaults, zero ceremony\n");
 
     // 2. BUILDER PATTERN WITH HUMAN-READABLE UNITS
     println!("2️⃣  ERGONOMIC CONFIGURATION:");
-    
+
     // Create temporary directories for demonstration
     let temp_dir = std::env::temp_dir();
     let data_path = temp_dir.join("data").to_string_lossy().to_string();
     let config_path = temp_dir.join("config").to_string_lossy().to_string();
     let output_path = temp_dir.join("output").to_string_lossy().to_string();
     let tmp_path = temp_dir.join("tmp").to_string_lossy().to_string();
-    
+
     // Create the directories to ensure they exist
     std::fs::create_dir_all(&data_path).ok();
     std::fs::create_dir_all(&config_path).ok();
     std::fs::create_dir_all(&output_path).ok();
     std::fs::create_dir_all(&tmp_path).ok();
-    
+
     let _config = InstanceConfig::builder()
-        .memory_limit(128.mb())                          // Human-readable units!
-        .timeout(45)                           // No more milliseconds!
-        .cpu_time_limit(10)                    // Clear time limits
-        .filesystem_read(&[&data_path, &config_path])          // Simple path arrays
-        .filesystem_write(&[&output_path, &tmp_path])          // Easy permissions
-        .network_loopback_only()                         // Clear security policy
-        .max_threads(4)                                  // Resource controls
-        .enable_debug()                                  // Development features
+        .memory_limit(128.mb()) // Human-readable units!
+        .timeout(45) // No more milliseconds!
+        .cpu_time_limit(10) // Clear time limits
+        .filesystem_read(&[&data_path, &config_path]) // Simple path arrays
+        .filesystem_write(&[&output_path, &tmp_path]) // Easy permissions
+        .network_loopback_only() // Clear security policy
+        .max_threads(4) // Resource controls
+        .enable_debug() // Development features
         .build()?;
-    
+
     println!("   ✓ Builder pattern eliminates verbose struct initialization");
     println!("   ✓ Human-readable units: .memory_limit(128.mb()), .timeout(45.seconds())");
     println!("   ✓ Clear security policies: .network_loopback_only(), .filesystem_read()");
@@ -65,7 +67,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     // 3. ENHANCED ERROR HANDLING
     println!("3️⃣  ENHANCED ERROR HANDLING:");
-    
+
     // Demonstrate detailed error with context
     let detailed_error = SandboxError::resource_exhausted(
         ResourceKind::Memory,
@@ -74,7 +76,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Some("Consider increasing memory limit with .memory_limit(256.mb()) or optimizing your WASM module".to_string())
     );
     println!("   Error: {detailed_error}");
-    
+
     // Security error with full context
     let security_context = SecurityContext {
         attempted_operation: "read file /etc/passwd".to_string(),
@@ -83,7 +85,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     };
     let security_error = SandboxError::security_violation(
         "Attempted to read protected system file",
-        security_context
+        security_context,
     );
     println!("   Security: {security_error}");
     println!("   ✓ Specific error types with actionable suggestions");
@@ -93,23 +95,29 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // 4. ADVANCED RESOURCE MONITORING
     println!("4️⃣  DETAILED RESOURCE MONITORING:");
     let mut monitor = ResourceMonitor::new(Some(InstanceId::new()));
-    
+
     // Simulate usage
     monitor.update_memory(50 * 1024 * 1024); // 50MB
     monitor.record_function_call();
     monitor.record_file_read(1024);
     monitor.update_cpu_time(std::time::Duration::from_millis(250));
     monitor.take_snapshot();
-    
+
     let usage = monitor.get_detailed_usage();
-    println!("   Memory: {} bytes (peak: {} bytes, {} allocations)", 
-             usage.memory.current_bytes, usage.memory.peak_bytes, usage.memory.allocations);
-    println!("   CPU: {:?} ({} function calls, {} instructions)", 
-             usage.cpu.time_spent, usage.cpu.function_calls, usage.cpu.instructions_executed);
-    println!("   I/O: {} bytes read, {} files opened, {} network requests", 
-             usage.io.bytes_read, usage.io.files_opened, usage.io.network_requests);
+    println!(
+        "   Memory: {} bytes (peak: {} bytes, {} allocations)",
+        usage.memory.current_bytes, usage.memory.peak_bytes, usage.memory.allocations
+    );
+    println!(
+        "   CPU: {:?} ({} function calls, {} instructions)",
+        usage.cpu.time_spent, usage.cpu.function_calls, usage.cpu.instructions_executed
+    );
+    println!(
+        "   I/O: {} bytes read, {} files opened, {} network requests",
+        usage.io.bytes_read, usage.io.files_opened, usage.io.network_requests
+    );
     println!("   Timeline: {} snapshots captured", usage.timeline.len());
-    
+
     let memory_utilization = monitor.get_utilization(&ResourceKind::Memory, 100 * 1024 * 1024);
     println!("   Memory utilization: {memory_utilization:.1}%");
     println!("   ✓ Timeline snapshots for performance analysis");
@@ -125,10 +133,10 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .fail_fast(false)
         .monitor_resources(true)
         .build();
-    
+
     let instance_id = uuid::Uuid::new_v4();
     let executor = StreamingExecutor::new(instance_id, streaming_config);
-    
+
     let batch_calls = vec![
         FunctionCall {
             function_name: "process_document".to_string(),
@@ -146,12 +154,16 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             timeout: Some(std::time::Duration::from_secs(15)),
         },
     ];
-    
+
     let results = executor.execute_batch(batch_calls).await;
     println!("   Executed {} operations in batch", results.len());
     for (i, result) in results.iter().enumerate() {
         match &result.result {
-            Ok(_) => println!("     ✓ Operation {} completed in {:?}", i + 1, result.execution_time),
+            Ok(_) => println!(
+                "     ✓ Operation {} completed in {:?}",
+                i + 1,
+                result.execution_time
+            ),
             Err(e) => println!("     ✗ Operation {} failed: {}", i + 1, e),
         }
     }
@@ -161,7 +173,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     // 6. PLUGIN ECOSYSTEM
     println!("6️⃣  GENERIC PLUGIN SYSTEM:");
-    
+
     // Create a comprehensive plugin manifest
     let plugin_manifest = PluginManifest {
         id: "pup-data-processor".to_string(),
@@ -201,7 +213,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     "required": ["stream_config"]
                 })),
                 output_schema: Some(json!({
-                    "type": "object", 
+                    "type": "object",
                     "properties": {
                         "processed_count": {"type": "integer"},
                         "errors": {"type": "array"},
@@ -226,19 +238,20 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 })),
                 supports_streaming: false,
                 execution_category: ExecutionCategory::Fast,
-            }
+            },
         ],
-        dependencies: vec![
-            Dependency {
-                name: "pup-core".to_string(),
-                version_requirement: ">=3.0.0".to_string(),
-                optional: false,
-                dependency_type: DependencyType::System,
-            }
-        ],
+        dependencies: vec![Dependency {
+            name: "pup-core".to_string(),
+            version_requirement: ">=3.0.0".to_string(),
+            optional: false,
+            dependency_type: DependencyType::System,
+        }],
         metadata: std::collections::HashMap::from([
             ("category".to_string(), json!("data-processing")),
-            ("tags".to_string(), json!(["streaming", "real-time", "analytics"])),
+            (
+                "tags".to_string(),
+                json!(["streaming", "real-time", "analytics"]),
+            ),
             ("performance_tier".to_string(), json!("high")),
         ]),
         min_sandbox_version: "0.4.0".to_string(),
@@ -246,14 +259,25 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         license: Some("MIT".to_string()),
         repository: Some("https://github.com/pup-dev/data-processor-plugin".to_string()),
     };
-    
-    println!("   Plugin: {} v{}", plugin_manifest.name, plugin_manifest.version);
-    println!("   Entry points: {} (including streaming support)", plugin_manifest.entry_points.len());
-    println!("   Permissions: {} network domains, {} filesystem paths", 
-             plugin_manifest.permissions.network.allowed_domains.len(),
-             plugin_manifest.permissions.filesystem.read_paths.len() + 
-             plugin_manifest.permissions.filesystem.write_paths.len());
-    println!("   Dependencies: {} required", plugin_manifest.dependencies.len());
+
+    println!(
+        "   Plugin: {} v{}",
+        plugin_manifest.name, plugin_manifest.version
+    );
+    println!(
+        "   Entry points: {} (including streaming support)",
+        plugin_manifest.entry_points.len()
+    );
+    println!(
+        "   Permissions: {} network domains, {} filesystem paths",
+        plugin_manifest.permissions.network.allowed_domains.len(),
+        plugin_manifest.permissions.filesystem.read_paths.len()
+            + plugin_manifest.permissions.filesystem.write_paths.len()
+    );
+    println!(
+        "   Dependencies: {} required",
+        plugin_manifest.dependencies.len()
+    );
     println!("   ✓ Complete plugin manifest with granular permissions");
     println!("   ✓ Hot reload compatibility checking");
     println!("   ✓ Security validation and performance benchmarking");
@@ -279,6 +303,6 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("   ✅ Production Ready: Advanced monitoring, security, and performance\n");
 
     println!("🚀 Ready for PUP integration and any other secure execution use case!");
-    
+
     Ok(())
 }

@@ -29,22 +29,22 @@ pub struct SecurityContext {
 pub enum SandboxError {
     /// Security violation with detailed context
     #[error("Security violation: {violation}")]
-    SecurityViolation { 
-        violation: String, 
+    SecurityViolation {
+        violation: String,
         instance_id: Option<InstanceId>,
         context: SecurityContext,
     },
-    
+
     /// Resource exhausted with specific usage details
     #[error("Resource exhausted: {kind:?} used {used}/{limit}")]
-    ResourceExhausted { 
-        kind: ResourceKind, 
-        limit: u64, 
+    ResourceExhausted {
+        kind: ResourceKind,
+        limit: u64,
         used: u64,
         instance_id: Option<InstanceId>,
         suggestion: Option<String>,
     },
-    
+
     /// WASM runtime error with function context
     #[error("WebAssembly runtime error in function '{function}': {message}")]
     WasmRuntime {
@@ -52,15 +52,15 @@ pub enum SandboxError {
         instance_id: Option<InstanceId>,
         message: String,
     },
-    
+
     /// Configuration error with helpful suggestions
     #[error("Configuration error: {message}")]
-    Configuration { 
+    Configuration {
         message: String,
         suggestion: Option<String>,
         field: Option<String>,
     },
-    
+
     /// Module compilation or loading error
     #[error("Module error: {operation} failed - {reason}")]
     Module {
@@ -68,7 +68,7 @@ pub enum SandboxError {
         reason: String,
         suggestion: Option<String>,
     },
-    
+
     /// Instance management error
     #[error("Instance error: {operation} failed for instance {instance_id:?} - {reason}")]
     Instance {
@@ -76,7 +76,7 @@ pub enum SandboxError {
         instance_id: Option<InstanceId>,
         reason: String,
     },
-    
+
     /// Communication channel error
     #[error("Communication error: {channel} channel failed - {reason}")]
     Communication {
@@ -84,7 +84,7 @@ pub enum SandboxError {
         reason: String,
         instance_id: Option<InstanceId>,
     },
-    
+
     /// Timeout error with context
     #[error("Operation timed out after {duration:?}: {operation}")]
     Timeout {
@@ -119,7 +119,7 @@ pub enum SandboxError {
     /// Serialization/deserialization error
     #[error("Serialization error: {format} {operation} failed - {reason}")]
     Serialization {
-        format: String, // json, messagepack, etc.
+        format: String,    // json, messagepack, etc.
         operation: String, // serialize, deserialize
         reason: String,
     },
@@ -150,11 +150,11 @@ pub enum SandboxError {
     /// Generic error with a message
     #[error("Generic error: {message}")]
     Generic { message: String },
-    
+
     /// Template rendering error
     #[error("Template error: {message}")]
     Template { message: String },
-    
+
     /// Compilation error
     #[error("Compilation error: {message}")]
     Compilation { message: String },
@@ -165,7 +165,7 @@ pub enum SandboxError {
         reason: String,
         instance_id: Option<InstanceId>,
     },
-    
+
     /// Wrapper generation error
     #[error("Wrapper generation error: {reason}")]
     WrapperGeneration {
@@ -260,7 +260,10 @@ impl SandboxError {
     }
 
     /// Create a function call error
-    pub fn function_call_error(function_name: impl Into<String>, reason: impl Into<String>) -> Self {
+    pub fn function_call_error(
+        function_name: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Self {
         Self::FunctionCall {
             function_name: function_name.into(),
             reason: reason.into(),
@@ -271,168 +274,184 @@ impl SandboxError {
 impl Clone for SandboxError {
     fn clone(&self) -> Self {
         match self {
-            SandboxError::SecurityViolation { violation, instance_id, context } => {
-                SandboxError::SecurityViolation {
-                    violation: violation.clone(),
-                    instance_id: *instance_id,
-                    context: context.clone(),
-                }
-            }
-            SandboxError::ResourceExhausted { kind, limit, used, instance_id, suggestion } => {
-                SandboxError::ResourceExhausted {
-                    kind: kind.clone(),
-                    limit: *limit,
-                    used: *used,
-                    instance_id: *instance_id,
-                    suggestion: suggestion.clone(),
-                }
-            }
-            SandboxError::WasmRuntime { function, instance_id, message } => {
-                SandboxError::WasmRuntime {
-                    function: function.clone(),
-                    instance_id: *instance_id,
-                    message: message.clone(),
-                }
-            }
-            SandboxError::Configuration { message, suggestion, field } => {
-                SandboxError::Configuration {
-                    message: message.clone(),
-                    suggestion: suggestion.clone(),
-                    field: field.clone(),
-                }
-            }
-            SandboxError::Module { operation, reason, suggestion } => {
-                SandboxError::Module {
-                    operation: operation.clone(),
-                    reason: reason.clone(),
-                    suggestion: suggestion.clone(),
-                }
-            }
-            SandboxError::Instance { operation, instance_id, reason } => {
-                SandboxError::Instance {
-                    operation: operation.clone(),
-                    instance_id: *instance_id,
-                    reason: reason.clone(),
-                }
-            }
-            SandboxError::Communication { channel, reason, instance_id } => {
-                SandboxError::Communication {
-                    channel: channel.clone(),
-                    reason: reason.clone(),
-                    instance_id: *instance_id,
-                }
-            }
-            SandboxError::Timeout { operation, duration, instance_id } => {
-                SandboxError::Timeout {
-                    operation: operation.clone(),
-                    duration: *duration,
-                    instance_id: *instance_id,
-                }
-            }
-            SandboxError::FunctionCall { function_name, reason } => {
-                SandboxError::FunctionCall {
-                    function_name: function_name.clone(),
-                    reason: reason.clone(),
-                }
-            }
-            SandboxError::Filesystem { operation, path, reason } => {
-                SandboxError::Filesystem {
-                    operation: operation.clone(),
-                    path: path.clone(),
-                    reason: reason.clone(),
-                }
-            }
-            SandboxError::Network { operation, reason, endpoint } => {
-                SandboxError::Network {
-                    operation: operation.clone(),
-                    reason: reason.clone(),
-                    endpoint: endpoint.clone(),
-                }
-            }
-            SandboxError::Serialization { format, operation, reason } => {
-                SandboxError::Serialization {
-                    format: format.clone(),
-                    operation: operation.clone(),
-                    reason: reason.clone(),
-                }
-            }
-            SandboxError::InvalidInput { field, reason, suggestion } => {
-                SandboxError::InvalidInput {
-                    field: field.clone(),
-                    reason: reason.clone(),
-                    suggestion: suggestion.clone(),
-                }
-            }
-            SandboxError::NotFound { resource_type, identifier } => {
-                SandboxError::NotFound {
-                    resource_type: resource_type.clone(),
-                    identifier: identifier.clone(),
-                }
-            }
-            SandboxError::Unsupported { operation, context, suggestion } => {
-                SandboxError::Unsupported {
-                    operation: operation.clone(),
-                    context: context.clone(),
-                    suggestion: suggestion.clone(),
-                }
-            }
-            SandboxError::Generic { message } => {
-                SandboxError::Generic {
-                    message: message.clone(),
-                }
-            }
-            SandboxError::Template { message } => {
-                SandboxError::Template {
-                    message: message.clone(),
-                }
-            }
-            SandboxError::Compilation { message } => {
-                SandboxError::Compilation {
-                    message: message.clone(),
-                }
-            }
-            SandboxError::InstanceCreation { reason, instance_id } => {
-                SandboxError::InstanceCreation {
-                    reason: reason.clone(),
-                    instance_id: *instance_id,
-                }
-            }
-            SandboxError::WrapperGeneration { reason, wrapper_type } => {
-                SandboxError::WrapperGeneration {
-                    reason: reason.clone(),
-                    wrapper_type: wrapper_type.clone(),
-                }
-            }
-            SandboxError::ModuleLoad { message } => {
-                SandboxError::ModuleLoad {
-                    message: message.clone(),
-                }
-            }
+            SandboxError::SecurityViolation {
+                violation,
+                instance_id,
+                context,
+            } => SandboxError::SecurityViolation {
+                violation: violation.clone(),
+                instance_id: *instance_id,
+                context: context.clone(),
+            },
+            SandboxError::ResourceExhausted {
+                kind,
+                limit,
+                used,
+                instance_id,
+                suggestion,
+            } => SandboxError::ResourceExhausted {
+                kind: kind.clone(),
+                limit: *limit,
+                used: *used,
+                instance_id: *instance_id,
+                suggestion: suggestion.clone(),
+            },
+            SandboxError::WasmRuntime {
+                function,
+                instance_id,
+                message,
+            } => SandboxError::WasmRuntime {
+                function: function.clone(),
+                instance_id: *instance_id,
+                message: message.clone(),
+            },
+            SandboxError::Configuration {
+                message,
+                suggestion,
+                field,
+            } => SandboxError::Configuration {
+                message: message.clone(),
+                suggestion: suggestion.clone(),
+                field: field.clone(),
+            },
+            SandboxError::Module {
+                operation,
+                reason,
+                suggestion,
+            } => SandboxError::Module {
+                operation: operation.clone(),
+                reason: reason.clone(),
+                suggestion: suggestion.clone(),
+            },
+            SandboxError::Instance {
+                operation,
+                instance_id,
+                reason,
+            } => SandboxError::Instance {
+                operation: operation.clone(),
+                instance_id: *instance_id,
+                reason: reason.clone(),
+            },
+            SandboxError::Communication {
+                channel,
+                reason,
+                instance_id,
+            } => SandboxError::Communication {
+                channel: channel.clone(),
+                reason: reason.clone(),
+                instance_id: *instance_id,
+            },
+            SandboxError::Timeout {
+                operation,
+                duration,
+                instance_id,
+            } => SandboxError::Timeout {
+                operation: operation.clone(),
+                duration: *duration,
+                instance_id: *instance_id,
+            },
+            SandboxError::FunctionCall {
+                function_name,
+                reason,
+            } => SandboxError::FunctionCall {
+                function_name: function_name.clone(),
+                reason: reason.clone(),
+            },
+            SandboxError::Filesystem {
+                operation,
+                path,
+                reason,
+            } => SandboxError::Filesystem {
+                operation: operation.clone(),
+                path: path.clone(),
+                reason: reason.clone(),
+            },
+            SandboxError::Network {
+                operation,
+                reason,
+                endpoint,
+            } => SandboxError::Network {
+                operation: operation.clone(),
+                reason: reason.clone(),
+                endpoint: endpoint.clone(),
+            },
+            SandboxError::Serialization {
+                format,
+                operation,
+                reason,
+            } => SandboxError::Serialization {
+                format: format.clone(),
+                operation: operation.clone(),
+                reason: reason.clone(),
+            },
+            SandboxError::InvalidInput {
+                field,
+                reason,
+                suggestion,
+            } => SandboxError::InvalidInput {
+                field: field.clone(),
+                reason: reason.clone(),
+                suggestion: suggestion.clone(),
+            },
+            SandboxError::NotFound {
+                resource_type,
+                identifier,
+            } => SandboxError::NotFound {
+                resource_type: resource_type.clone(),
+                identifier: identifier.clone(),
+            },
+            SandboxError::Unsupported {
+                operation,
+                context,
+                suggestion,
+            } => SandboxError::Unsupported {
+                operation: operation.clone(),
+                context: context.clone(),
+                suggestion: suggestion.clone(),
+            },
+            SandboxError::Generic { message } => SandboxError::Generic {
+                message: message.clone(),
+            },
+            SandboxError::Template { message } => SandboxError::Template {
+                message: message.clone(),
+            },
+            SandboxError::Compilation { message } => SandboxError::Compilation {
+                message: message.clone(),
+            },
+            SandboxError::InstanceCreation {
+                reason,
+                instance_id,
+            } => SandboxError::InstanceCreation {
+                reason: reason.clone(),
+                instance_id: *instance_id,
+            },
+            SandboxError::WrapperGeneration {
+                reason,
+                wrapper_type,
+            } => SandboxError::WrapperGeneration {
+                reason: reason.clone(),
+                wrapper_type: wrapper_type.clone(),
+            },
+            SandboxError::ModuleLoad { message } => SandboxError::ModuleLoad {
+                message: message.clone(),
+            },
             SandboxError::RuntimeInitialization { message } => {
                 SandboxError::RuntimeInitialization {
                     message: message.clone(),
                 }
             }
-            SandboxError::IoError { message } => {
-                SandboxError::IoError {
-                    message: message.clone(),
-                }
-            }
-            SandboxError::Capability { message } => {
-                SandboxError::Capability {
-                    message: message.clone(),
-                }
-            }
-            SandboxError::ResourceLimit { message } => {
-                SandboxError::ResourceLimit {
-                    message: message.clone(),
-                }
-            }
-            SandboxError::UnsupportedOperation { message } => {
-                SandboxError::UnsupportedOperation {
-                    message: message.clone(),
-                }
-            }
+            SandboxError::IoError { message } => SandboxError::IoError {
+                message: message.clone(),
+            },
+            SandboxError::Capability { message } => SandboxError::Capability {
+                message: message.clone(),
+            },
+            SandboxError::ResourceLimit { message } => SandboxError::ResourceLimit {
+                message: message.clone(),
+            },
+            SandboxError::UnsupportedOperation { message } => SandboxError::UnsupportedOperation {
+                message: message.clone(),
+            },
             // For wrapped errors that don't implement Clone, we create a new error with the string representation
             SandboxError::Io(e) => SandboxError::Filesystem {
                 operation: "io".to_string(),

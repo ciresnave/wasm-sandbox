@@ -1,25 +1,25 @@
 //! Python language bindings module
-//! 
+//!
 //! This module provides Python language bindings for the wasm-sandbox,
 //! allowing Python developers to use the sandbox functionality.
 
-use std::path::{Path, PathBuf};
 use crate::error::Result;
+use std::path::{Path, PathBuf};
 
 /// Python bindings generator for wasm-sandbox
 pub struct PythonBindings {
     /// Output directory for generated bindings
     output_dir: PathBuf,
-    
+
     /// Package name for the Python bindings
     package_name: String,
-    
+
     /// Version for the Python bindings
     version: String,
-    
+
     /// Python minimum version requirement
     min_python_version: String,
-    
+
     /// Additional dependencies
     dependencies: Vec<String>,
 }
@@ -32,92 +32,90 @@ impl PythonBindings {
             package_name: "wasm_sandbox".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             min_python_version: "3.8".to_string(),
-            dependencies: vec![
-                "cffi>=1.15.0".to_string(),
-                "pydantic>=2.0.0".to_string(),
-            ],
+            dependencies: vec!["cffi>=1.15.0".to_string(), "pydantic>=2.0.0".to_string()],
         }
     }
-    
+
     /// Set the package name
     pub fn with_package_name(mut self, name: impl Into<String>) -> Self {
         self.package_name = name.into();
         self
     }
-    
+
     /// Set the version
     pub fn with_version(mut self, version: impl Into<String>) -> Self {
         self.version = version.into();
         self
     }
-    
+
     /// Set the minimum Python version
     pub fn with_min_python_version(mut self, version: impl Into<String>) -> Self {
         self.min_python_version = version.into();
         self
     }
-    
+
     /// Add a dependency
     pub fn add_dependency(mut self, dependency: impl Into<String>) -> Self {
         self.dependencies.push(dependency.into());
         self
     }
-    
+
     /// Generate Python bindings
     pub fn generate(&self) -> Result<()> {
         // Create output directory
         std::fs::create_dir_all(&self.output_dir)?;
-        
+
         // Generate Python package structure
         self.generate_package_structure()?;
-        
+
         // Generate core bindings
         self.generate_core_bindings()?;
-        
+
         // Generate setup.py
         self.generate_setup_py()?;
-        
+
         // Generate README.md
         self.generate_readme()?;
-        
+
         // Generate pyproject.toml
         self.generate_pyproject_toml()?;
-        
+
         Ok(())
     }
-    
+
     /// Generate Python package structure
     fn generate_package_structure(&self) -> Result<()> {
         // Create package directory
         let package_dir = self.output_dir.join(&self.package_name);
         std::fs::create_dir_all(&package_dir)?;
-        
+
         // Create __init__.py
         let init_content = self.generate_init_py_content();
         std::fs::write(package_dir.join("__init__.py"), init_content)?;
-        
+
         // Create submodules
         let modules = ["sandbox", "security", "communication", "utils"];
         for module in &modules {
             let module_dir = package_dir.join(module);
             std::fs::create_dir_all(&module_dir)?;
-            
+
             // Create module __init__.py
             let module_init_content = format!("# {} module\n\n", module);
             std::fs::write(module_dir.join("__init__.py"), module_init_content)?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Generate core bindings
     fn generate_core_bindings(&self) -> Result<()> {
         // Core sandbox module
-        let sandbox_module_path = self.output_dir
+        let sandbox_module_path = self
+            .output_dir
             .join(&self.package_name)
             .join("sandbox")
             .join("sandbox.py");
-            
+
         let sandbox_content = r#"
 import os
 import json
@@ -264,12 +262,10 @@ def run_with_timeout(
     return sandbox.call(function_name, params)
 "#;
         std::fs::write(sandbox_module_path, sandbox_content)?;
-        
+
         // Native bindings module
-        let native_module_path = self.output_dir
-            .join(&self.package_name)
-            .join("_native.py");
-            
+        let native_module_path = self.output_dir.join(&self.package_name).join("_native.py");
+
         let native_content = r#"
 import os
 import platform
@@ -335,13 +331,14 @@ if lib_path is None:
 lib = ffi.dlopen(lib_path)
 "#;
         std::fs::write(native_module_path, native_content)?;
-        
+
         // Security module
-        let security_module_path = self.output_dir
+        let security_module_path = self
+            .output_dir
             .join(&self.package_name)
             .join("security")
             .join("security.py");
-            
+
         let security_content = r#"
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Set
@@ -428,13 +425,14 @@ class ResourceLimits:
     time: TimeLimits = field(default_factory=TimeLimits)
 "#;
         std::fs::write(security_module_path, security_content)?;
-        
+
         Ok(())
     }
-    
+
     /// Generate setup.py
     fn generate_setup_py(&self) -> Result<()> {
-        let setup_py = format!(r#"#!/usr/bin/env python3
+        let setup_py = format!(
+            r#"#!/usr/bin/env python3
 
 from setuptools import setup, find_packages
 
@@ -469,20 +467,23 @@ setup(
             package_name = self.package_name,
             version = self.version,
             min_python_version = self.min_python_version,
-            dependencies = self.dependencies.iter()
+            dependencies = self
+                .dependencies
+                .iter()
                 .map(|dep| format!("        \"{}\",", dep))
                 .collect::<Vec<_>>()
                 .join("\n"),
         );
-        
+
         std::fs::write(self.output_dir.join("setup.py"), setup_py)?;
-        
+
         Ok(())
     }
-    
+
     /// Generate README.md
     fn generate_readme(&self) -> Result<()> {
-        let readme = format!(r#"# {package_name}
+        let readme = format!(
+            r#"# {package_name}
 
 Python bindings for [wasm-sandbox](https://github.com/ciresnave/wasm-sandbox) - A secure WebAssembly sandbox for running untrusted code.
 
@@ -537,15 +538,16 @@ print(f"10 + 20 = {{add_result}}")  # Output: 10 + 20 = 30
             package_name = self.package_name,
             min_python_version = self.min_python_version,
         );
-        
+
         std::fs::write(self.output_dir.join("README.md"), readme)?;
-        
+
         Ok(())
     }
-    
+
     /// Generate pyproject.toml
     fn generate_pyproject_toml(&self) -> Result<()> {
-        let pyproject_toml = format!(r#"[build-system]
+        let pyproject_toml = format!(
+            r#"[build-system]
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
@@ -570,15 +572,16 @@ python_files = "test_*.py"
 "#,
             min_python_version = self.min_python_version,
         );
-        
+
         std::fs::write(self.output_dir.join("pyproject.toml"), pyproject_toml)?;
-        
+
         Ok(())
     }
-    
+
     /// Generate __init__.py content
     fn generate_init_py_content(&self) -> String {
-        format!(r#"""Python bindings for wasm-sandbox
+        format!(
+            r#"""Python bindings for wasm-sandbox
 
 A secure WebAssembly sandbox for running untrusted code.
 """
@@ -621,24 +624,24 @@ impl CBindingsGenerator {
             output_dir: output_dir.as_ref().to_path_buf(),
         }
     }
-    
+
     /// Generate C bindings
     pub fn generate(&self) -> Result<()> {
         // Create output directory
         std::fs::create_dir_all(&self.output_dir)?;
-        
+
         // Generate header file
         self.generate_header()?;
-        
+
         // Generate implementation file
         self.generate_implementation()?;
-        
+
         // Generate build script
         self.generate_build_script()?;
-        
+
         Ok(())
     }
-    
+
     /// Generate header file
     fn generate_header(&self) -> Result<()> {
         let header_content = r#"/**
@@ -773,12 +776,15 @@ const char* get_last_error(void);
 
 #endif /* WASM_SANDBOX_PYTHON_H */
 "#;
-        
-        std::fs::write(self.output_dir.join("wasm_sandbox_python.h"), header_content)?;
-        
+
+        std::fs::write(
+            self.output_dir.join("wasm_sandbox_python.h"),
+            header_content,
+        )?;
+
         Ok(())
     }
-    
+
     /// Generate implementation file
     fn generate_implementation(&self) -> Result<()> {
         let implementation = r#"/**
@@ -936,12 +942,15 @@ WASM_SANDBOX_EXPORT const char* get_last_error(void) {
     return error_buffer;
 }
 "#;
-        
-        std::fs::write(self.output_dir.join("wasm_sandbox_python.c"), implementation)?;
-        
+
+        std::fs::write(
+            self.output_dir.join("wasm_sandbox_python.c"),
+            implementation,
+        )?;
+
         Ok(())
     }
-    
+
     /// Generate build script
     fn generate_build_script(&self) -> Result<()> {
         let build_script = r#"#!/bin/bash
@@ -974,9 +983,9 @@ fi
 
 echo "Build complete: $OUTPUT_NAME"
 "#;
-        
+
         std::fs::write(self.output_dir.join("build.sh"), build_script)?;
-        
+
         // Make the build script executable on Unix-like systems
         #[cfg(unix)]
         {
@@ -985,7 +994,7 @@ echo "Build complete: $OUTPUT_NAME"
             perm.set_mode(0o755);
             std::fs::set_permissions(self.output_dir.join("build.sh"), perm)?;
         }
-        
+
         Ok(())
     }
 }
@@ -997,19 +1006,19 @@ impl LanguageBindings {
     /// Generate Python bindings
     pub fn generate_python_bindings(output_dir: impl AsRef<Path>) -> Result<()> {
         let python_dir = output_dir.as_ref().join("python");
-        
+
         // Generate Python package
         let python_bindings = PythonBindings::new(&python_dir);
         python_bindings.generate()?;
-        
+
         // Generate C bindings
         let c_bindings_dir = output_dir.as_ref().join("python_c_bindings");
         let c_bindings = CBindingsGenerator::new(c_bindings_dir);
         c_bindings.generate()?;
-        
+
         Ok(())
     }
-    
+
     // This would be expanded with other language bindings
     // pub fn generate_javascript_bindings(output_dir: impl AsRef<Path>) -> Result<()> { ... }
     // pub fn generate_ruby_bindings(output_dir: impl AsRef<Path>) -> Result<()> { ... }

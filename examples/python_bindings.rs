@@ -8,24 +8,30 @@ use wasm_sandbox::Result;
 fn main() -> Result<()> {
     println!("🐍 Python Bindings Example");
     println!("This demonstrates the Python bindings generation for wasm-sandbox");
-    
+
     #[cfg(not(feature = "python-bindings"))]
     {
         println!("❌ Python bindings feature is not enabled!");
         println!("Please run with: cargo run --example python_bindings --features python-bindings");
         Ok(())
     }
-    
+
     #[cfg(feature = "python-bindings")]
     {
         use std::path::PathBuf;
-        
+
         // Simulate output directory for demonstration
         let output_dir = PathBuf::from("./target/python_bindings");
-        
-        println!("✅ Python bindings generated in: {}", output_dir.join("python").display());
-        println!("✅ C bindings for Python generated in: {}", output_dir.join("python_c_bindings").display());
-        
+
+        println!(
+            "✅ Python bindings generated in: {}",
+            output_dir.join("python").display()
+        );
+        println!(
+            "✅ C bindings for Python generated in: {}",
+            output_dir.join("python_c_bindings").display()
+        );
+
         println!("\nUsage example:");
         println!("1. Build the C bindings:");
         println!("   cd {}", output_dir.join("python_c_bindings").display());
@@ -51,7 +57,7 @@ fn main() -> Result<()> {
         println!("result = sandbox.call('process', {{'data': 'Hello, world!'}})");
         println!("print(result)");
         println!("```");
-        
+
         println!("\n🎉 Python bindings example completed successfully!");
         Ok(())
     }

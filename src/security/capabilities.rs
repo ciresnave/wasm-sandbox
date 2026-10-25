@@ -1,13 +1,13 @@
 //! Implementation of security capabilities for the sandbox
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::net::{IpAddr, SocketAddr};
+use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result, SecurityContext};
 use crate::security::{
-    NetworkCapability, FilesystemCapability, 
-    EnvironmentCapability, ProcessCapability, TimeCapability, RandomCapability
+    EnvironmentCapability, FilesystemCapability, NetworkCapability, ProcessCapability,
+    RandomCapability, TimeCapability,
 };
 
 /// Capability verification helper
@@ -26,7 +26,7 @@ impl NetworkVerifier {
     pub fn new(capability: NetworkCapability) -> Self {
         Self { capability }
     }
-    
+
     /// Check if a host is allowed
     pub fn is_host_allowed(&self, host: &str, port: u16, secure: bool) -> bool {
         match &self.capability {
@@ -34,7 +34,7 @@ impl NetworkVerifier {
             NetworkCapability::Loopback => {
                 // Check if host is localhost or 127.0.0.1
                 host == "localhost" || host == "127.0.0.1" || host == "::1"
-            },
+            }
             NetworkCapability::AllowedHosts(hosts) => {
                 // Check if host is in the allowed hosts list
                 hosts.iter().any(|h| {
@@ -42,30 +42,30 @@ impl NetworkVerifier {
                     if h.host != host {
                         return false;
                     }
-                    
+
                     // Check port if specified
-                    if let Some(port_range) = &h.ports {
-                        if !port_range.contains(port) {
-                            return false;
-                        }
+                    if let Some(port_range) = &h.ports
+                        && !port_range.contains(port)
+                    {
+                        return false;
                     }
-                    
+
                     // Check secure flag
                     if !h.secure && secure {
                         return false;
                     }
-                    
+
                     true
                 })
-            },
+            }
             NetworkCapability::AllowedPorts(ports) => {
                 // Check if port is in any allowed port range
                 ports.iter().any(|r| r.contains(port))
-            },
+            }
             NetworkCapability::Full => true,
         }
     }
-    
+
     /// Check if an IP address is allowed
     pub fn is_ip_allowed(&self, ip: IpAddr, port: u16) -> bool {
         match &self.capability {
@@ -76,19 +76,19 @@ impl NetworkVerifier {
                     IpAddr::V4(addr) => addr.is_loopback(),
                     IpAddr::V6(addr) => addr.is_loopback(),
                 }
-            },
+            }
             NetworkCapability::AllowedHosts(_hosts) => {
                 // Not implemented: would need to resolve hosts to IPs
                 false
-            },
+            }
             NetworkCapability::AllowedPorts(ports) => {
                 // Check if port is in any allowed port range
                 ports.iter().any(|r| r.contains(port))
-            },
+            }
             NetworkCapability::Full => true,
         }
     }
-    
+
     /// Check if a socket address is allowed
     pub fn is_socket_allowed(&self, socket: SocketAddr) -> bool {
         self.is_ip_allowed(socket.ip(), socket.port())
@@ -100,16 +100,18 @@ impl CapabilityVerifier for NetworkVerifier {
         match operation {
             "connect" => {
                 if params.len() < 2 {
-                    return Err(Error::Capability { message: "Missing host and port for connect".to_string() });
+                    return Err(Error::Capability {
+                        message: "Missing host and port for connect".to_string(),
+                    });
                 }
-                
+
                 let host = params[0];
-                let port = params[1].parse::<u16>().map_err(|_| {
-                    Error::Capability { message: format!("Invalid port: {}", params[1]) }
+                let port = params[1].parse::<u16>().map_err(|_| Error::Capability {
+                    message: format!("Invalid port: {}", params[1]),
                 })?;
-                
+
                 let secure = params.get(2).map(|s| *s == "secure").unwrap_or(false);
-                
+
                 if !self.is_host_allowed(host, port, secure) {
                     return Err(Error::SecurityViolation {
                         violation: format!("Network access denied to {}:{}", host, port),
@@ -120,14 +122,16 @@ impl CapabilityVerifier for NetworkVerifier {
             }
             "bind" => {
                 if params.len() < 2 {
-                    return Err(Error::Capability { message: "Missing host and port for bind".to_string() });
+                    return Err(Error::Capability {
+                        message: "Missing host and port for bind".to_string(),
+                    });
                 }
-                
+
                 let host = params[0];
-                let port = params[1].parse::<u16>().map_err(|_| {
-                    Error::Capability { message: format!("Invalid port: {}", params[1]) }
+                let port = params[1].parse::<u16>().map_err(|_| Error::Capability {
+                    message: format!("Invalid port: {}", params[1]),
                 })?;
-                
+
                 if !self.is_host_allowed(host, port, false) {
                     return Err(Error::SecurityViolation {
                         violation: format!("Network binding denied to {}:{}", host, port),
@@ -138,13 +142,15 @@ impl CapabilityVerifier for NetworkVerifier {
             }
             "listen" => {
                 if params.len() < 1 {
-                    return Err(Error::Capability { message: "Missing port for listen".to_string() });
+                    return Err(Error::Capability {
+                        message: "Missing port for listen".to_string(),
+                    });
                 }
-                
-                let port = params[0].parse::<u16>().map_err(|_| {
-                    Error::Capability { message: format!("Invalid port: {}", params[0]) }
+
+                let port = params[0].parse::<u16>().map_err(|_| Error::Capability {
+                    message: format!("Invalid port: {}", params[0]),
                 })?;
-                
+
                 // For listen, we check if the loopback address is allowed with this port
                 if !self.is_host_allowed("127.0.0.1", port, false) {
                     return Err(Error::SecurityViolation {
@@ -155,10 +161,12 @@ impl CapabilityVerifier for NetworkVerifier {
                 }
             }
             _ => {
-                return Err(Error::Capability { message: format!("Unknown network operation: {}", operation) });
+                return Err(Error::Capability {
+                    message: format!("Unknown network operation: {}", operation),
+                });
             }
         }
-        
+
         Ok(())
     }
 }
@@ -174,23 +182,25 @@ impl FilesystemVerifier {
     /// Create a new filesystem verifier
     pub fn new(capability: FilesystemCapability) -> Self {
         // Normalize paths for better comparison
-        let normalized_readable = capability.readable_dirs
+        let normalized_readable = capability
+            .readable_dirs
             .iter()
             .filter_map(|p| std::fs::canonicalize(p).ok())
             .collect();
-            
-        let normalized_writable = capability.writable_dirs
+
+        let normalized_writable = capability
+            .writable_dirs
             .iter()
             .filter_map(|p| std::fs::canonicalize(p).ok())
             .collect();
-        
-        Self { 
+
+        Self {
             capability,
             normalized_readable,
             normalized_writable,
         }
     }
-    
+
     /// Check if a path is readable
     pub fn is_readable(&self, path: &Path) -> bool {
         // Try to canonicalize the path
@@ -198,18 +208,18 @@ impl FilesystemVerifier {
             Ok(p) => p,
             Err(_) => return false, // Path doesn't exist or other error
         };
-        
+
         // Check if the path is in any readable directory
         for dir in &self.normalized_readable {
             if is_path_within(dir, &canon_path) {
                 return true;
             }
         }
-        
+
         // Also check if it's writable (writable implies readable)
         self.is_writable(path)
     }
-    
+
     /// Check if a path is writable
     pub fn is_writable(&self, path: &Path) -> bool {
         // Try to canonicalize the path
@@ -227,27 +237,27 @@ impl FilesystemVerifier {
                 }
             }
         };
-        
+
         // Check if the path is in any writable directory
         for dir in &self.normalized_writable {
             if is_path_within(dir, &canon_path) {
                 return true;
             }
         }
-        
+
         false
     }
-    
+
     /// Check if file creation is allowed
     pub fn can_create(&self) -> bool {
         self.capability.allow_create
     }
-    
+
     /// Check if file deletion is allowed
     pub fn can_delete(&self) -> bool {
         self.capability.allow_delete
     }
-    
+
     /// Check if a file size is within limits
     pub fn is_size_allowed(&self, size: u64) -> bool {
         match self.capability.max_file_size {
@@ -262,9 +272,11 @@ impl CapabilityVerifier for FilesystemVerifier {
         match operation {
             "open" | "read" => {
                 if params.is_empty() {
-                    return Err(Error::Capability { message: "Missing path for open/read".to_string() });
+                    return Err(Error::Capability {
+                        message: "Missing path for open/read".to_string(),
+                    });
                 }
-                
+
                 let path = Path::new(params[0]);
                 if !self.is_readable(path) {
                     return Err(Error::SecurityViolation {
@@ -276,9 +288,11 @@ impl CapabilityVerifier for FilesystemVerifier {
             }
             "write" | "append" => {
                 if params.is_empty() {
-                    return Err(Error::Capability { message: "Missing path for write/append".to_string() });
+                    return Err(Error::Capability {
+                        message: "Missing path for write/append".to_string(),
+                    });
                 }
-                
+
                 let path = Path::new(params[0]);
                 if !self.is_writable(path) {
                     return Err(Error::SecurityViolation {
@@ -287,25 +301,27 @@ impl CapabilityVerifier for FilesystemVerifier {
                         context: create_security_context("write", "filesystem.write", &[]),
                     });
                 }
-                
+
                 // Check size limit if provided
                 if params.len() > 1 {
-                    let size = params[1].parse::<u64>().map_err(|_| {
-                        Error::Capability { message: format!("Invalid size: {}", params[1]) }
+                    let size = params[1].parse::<u64>().map_err(|_| Error::Capability {
+                        message: format!("Invalid size: {}", params[1]),
                     })?;
-                    
+
                     if !self.is_size_allowed(size) {
                         return Err(Error::ResourceLimit {
-                            message: format!("File size limit exceeded: {}", size)
+                            message: format!("File size limit exceeded: {}", size),
                         });
                     }
                 }
             }
             "create" => {
                 if params.is_empty() {
-                    return Err(Error::Capability { message: "Missing path for create".to_string() });
+                    return Err(Error::Capability {
+                        message: "Missing path for create".to_string(),
+                    });
                 }
-                
+
                 if !self.can_create() {
                     return Err(Error::SecurityViolation {
                         violation: "File creation is not allowed".to_string(),
@@ -313,7 +329,7 @@ impl CapabilityVerifier for FilesystemVerifier {
                         context: create_security_context("create", "filesystem.create", &[]),
                     });
                 }
-                
+
                 let path = Path::new(params[0]);
                 if !self.is_writable(path) {
                     return Err(Error::SecurityViolation {
@@ -325,9 +341,11 @@ impl CapabilityVerifier for FilesystemVerifier {
             }
             "delete" | "remove" => {
                 if params.is_empty() {
-                    return Err(Error::Capability { message: "Missing path for delete/remove".to_string() });
+                    return Err(Error::Capability {
+                        message: "Missing path for delete/remove".to_string(),
+                    });
                 }
-                
+
                 if !self.can_delete() {
                     return Err(Error::SecurityViolation {
                         violation: "File deletion is not allowed".to_string(),
@@ -335,7 +353,7 @@ impl CapabilityVerifier for FilesystemVerifier {
                         context: create_security_context("delete", "filesystem.delete", &[]),
                     });
                 }
-                
+
                 let path = Path::new(params[0]);
                 if !self.is_writable(path) {
                     return Err(Error::SecurityViolation {
@@ -346,10 +364,12 @@ impl CapabilityVerifier for FilesystemVerifier {
                 }
             }
             _ => {
-                return Err(Error::Capability { message: format!("Unknown filesystem operation: {}", operation) });
+                return Err(Error::Capability {
+                    message: format!("Unknown filesystem operation: {}", operation),
+                });
             }
         }
-        
+
         Ok(())
     }
 }
@@ -358,12 +378,12 @@ impl CapabilityVerifier for FilesystemVerifier {
 fn is_path_within(dir: &Path, path: &Path) -> bool {
     let dir_str = dir.to_string_lossy();
     let path_str = path.to_string_lossy();
-    
+
     // Check if path starts with dir (and there's either an exact match or a path separator after)
     if path_str == dir_str {
         return true;
     }
-    
+
     path_str.starts_with(&format!("{}{}", dir_str, std::path::MAIN_SEPARATOR))
 }
 
@@ -377,7 +397,7 @@ impl EnvironmentVerifier {
     pub fn new(capability: EnvironmentCapability) -> Self {
         Self { capability }
     }
-    
+
     /// Check if a variable is allowed
     pub fn is_var_allowed(&self, var: &str) -> bool {
         match &self.capability {
@@ -394,9 +414,11 @@ impl CapabilityVerifier for EnvironmentVerifier {
         match operation {
             "get" | "set" => {
                 if params.is_empty() {
-                    return Err(Error::Capability { message: "Missing variable name".to_string() });
+                    return Err(Error::Capability {
+                        message: "Missing variable name".to_string(),
+                    });
                 }
-                
+
                 let var = params[0];
                 if !self.is_var_allowed(var) {
                     return Err(Error::SecurityViolation {
@@ -405,7 +427,7 @@ impl CapabilityVerifier for EnvironmentVerifier {
                         context: create_security_context("get", "environment.get", &[]),
                     });
                 }
-                
+
                 // For "set", additionally check if we're in Full mode
                 if operation == "set" && !matches!(self.capability, EnvironmentCapability::Full) {
                     return Err(Error::SecurityViolation {
@@ -416,10 +438,12 @@ impl CapabilityVerifier for EnvironmentVerifier {
                 }
             }
             _ => {
-                return Err(Error::Capability { message: format!("Unknown environment operation: {}", operation) });
+                return Err(Error::Capability {
+                    message: format!("Unknown environment operation: {}", operation),
+                });
             }
         }
-        
+
         Ok(())
     }
 }
@@ -434,7 +458,7 @@ impl ProcessVerifier {
     pub fn new(capability: ProcessCapability) -> Self {
         Self { capability }
     }
-    
+
     /// Check if a command is allowed to be executed
     pub fn is_command_allowed(&self, command: &str) -> bool {
         match &self.capability {
@@ -446,13 +470,13 @@ impl ProcessVerifier {
                     if cmd == command {
                         return true;
                     }
-                    
+
                     // Wildcard match
                     if cmd.ends_with("*") {
                         let prefix = &cmd[..cmd.len() - 1];
                         return command.starts_with(prefix);
                     }
-                    
+
                     false
                 })
             }
@@ -466,9 +490,11 @@ impl CapabilityVerifier for ProcessVerifier {
         match operation {
             "exec" | "spawn" => {
                 if params.is_empty() {
-                    return Err(Error::Capability { message: "Missing command".to_string() });
+                    return Err(Error::Capability {
+                        message: "Missing command".to_string(),
+                    });
                 }
-                
+
                 let command = params[0];
                 if !self.is_command_allowed(command) {
                     return Err(Error::SecurityViolation {
@@ -479,10 +505,12 @@ impl CapabilityVerifier for ProcessVerifier {
                 }
             }
             _ => {
-                return Err(Error::Capability { message: format!("Unknown process operation: {}", operation) });
+                return Err(Error::Capability {
+                    message: format!("Unknown process operation: {}", operation),
+                });
             }
         }
-        
+
         Ok(())
     }
 }
@@ -497,7 +525,7 @@ impl TimeVerifier {
     pub fn new(capability: TimeCapability) -> Self {
         Self { capability }
     }
-    
+
     /// Check if setting time is allowed
     pub fn can_set_time(&self) -> bool {
         matches!(self.capability, TimeCapability::Full)
@@ -521,9 +549,9 @@ impl CapabilityVerifier for TimeVerifier {
                 }
                 Ok(())
             }
-            _ => {
-                Err(Error::Capability { message: format!("Unknown time operation: {}", operation) })
-            }
+            _ => Err(Error::Capability {
+                message: format!("Unknown time operation: {}", operation),
+            }),
         }
     }
 }
@@ -538,12 +566,12 @@ impl RandomVerifier {
     pub fn new(capability: RandomCapability) -> Self {
         Self { capability }
     }
-    
+
     /// Check if secure random generation is allowed
     pub fn can_secure_random(&self) -> bool {
         matches!(self.capability, RandomCapability::Full)
     }
-    
+
     /// Check if any random generation is allowed
     pub fn can_pseudo_random(&self) -> bool {
         !matches!(self.capability, RandomCapability::None)
@@ -573,19 +601,26 @@ impl CapabilityVerifier for RandomVerifier {
                 }
                 Ok(())
             }
-            _ => {
-                Err(Error::Capability { message: format!("Unknown random operation: {}", operation) })
-            }
+            _ => Err(Error::Capability {
+                message: format!("Unknown random operation: {}", operation),
+            }),
         }
     }
 }
 
 /// Helper function to create SecurityContext for capability violations
-fn create_security_context(operation: &str, required_capability: &str, available_capabilities: &[&str]) -> SecurityContext {
+fn create_security_context(
+    operation: &str,
+    required_capability: &str,
+    available_capabilities: &[&str],
+) -> SecurityContext {
     SecurityContext {
         attempted_operation: operation.to_string(),
         required_capability: required_capability.to_string(),
-        available_capabilities: available_capabilities.iter().map(|s| s.to_string()).collect(),
+        available_capabilities: available_capabilities
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
     }
 }
 
@@ -593,19 +628,19 @@ fn create_security_context(operation: &str, required_capability: &str, available
 pub struct CapabilityManager {
     /// Network verifier
     pub network: NetworkVerifier,
-    
+
     /// Filesystem verifier
     pub filesystem: FilesystemVerifier,
-    
+
     /// Environment verifier
     pub environment: EnvironmentVerifier,
-    
+
     /// Process verifier
     pub process: ProcessVerifier,
-    
+
     /// Time verifier
     pub time: TimeVerifier,
-    
+
     /// Random verifier
     pub random: RandomVerifier,
 }
@@ -629,7 +664,7 @@ impl CapabilityManager {
             random: RandomVerifier::new(random),
         }
     }
-    
+
     /// Check if an operation is allowed based on its capability domain
     pub fn verify(&self, domain: &str, operation: &str, params: &[&str]) -> Result<()> {
         match domain {
@@ -639,7 +674,9 @@ impl CapabilityManager {
             "process" | "proc" => self.process.verify(operation, params),
             "time" => self.time.verify(operation, params),
             "random" | "rand" => self.random.verify(operation, params),
-            _ => Err(Error::Capability { message: format!("Unknown capability domain: {}", domain) }),
+            _ => Err(Error::Capability {
+                message: format!("Unknown capability domain: {}", domain),
+            }),
         }
     }
 }

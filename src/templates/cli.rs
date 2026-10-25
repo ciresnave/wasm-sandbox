@@ -11,7 +11,7 @@ impl CliTemplate {
     pub fn new() -> Self {
         Self
     }
-    
+
     /// Render the CLI template with the given variables
     pub fn render(&self, _variables: &HashMap<String, String>) -> Result<String> {
         Ok(r#"//! CLI Tool wrapper for WebAssembly sandboxed module
@@ -22,7 +22,8 @@ use std::path::PathBuf;
 fn main() {
     println!("CLI wrapper placeholder - implement me!");
 }
-"#.to_string())
+"#
+        .to_string())
     }
 }
 

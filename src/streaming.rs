@@ -1,11 +1,11 @@
 //! Streaming execution APIs for large datasets and batch operations
 
-use std::pin::Pin;
+use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use serde_json::Value;
-use async_trait::async_trait;
+use std::pin::Pin;
 
-use crate::error::{Result, SandboxError, InstanceId};
+use crate::error::{InstanceId, Result, SandboxError};
 
 /// Function call for batch execution
 #[derive(Debug, Clone)]
@@ -28,30 +28,33 @@ pub struct FunctionResult {
 #[async_trait]
 pub trait StreamingExecution {
     /// Execute a stream of function calls, yielding results as they complete
-    async fn execute_stream<S>(&self, input: S) -> Pin<Box<dyn Stream<Item = FunctionResult> + Send>>
-    where 
+    async fn execute_stream<S>(
+        &self,
+        input: S,
+    ) -> Pin<Box<dyn Stream<Item = FunctionResult> + Send>>
+    where
         S: Stream<Item = FunctionCall> + Send + 'static;
-    
+
     /// Execute a batch of function calls
     async fn execute_batch<I>(&self, calls: I) -> Vec<FunctionResult>
-    where 
+    where
         I: IntoIterator<Item = FunctionCall> + Send,
         I::IntoIter: Send;
 
     /// Execute a function with streaming input data
     async fn execute_with_streaming_input<S>(
-        &self, 
+        &self,
         function_name: &str,
-        input_stream: S
+        input_stream: S,
     ) -> Pin<Box<dyn Stream<Item = Result<Value>> + Send>>
-    where 
+    where
         S: Stream<Item = Value> + Send + 'static;
 
     /// Execute a function that produces streaming output
     async fn execute_with_streaming_output(
         &self,
         function_name: &str,
-        parameters: &[Value]
+        parameters: &[Value],
     ) -> Pin<Box<dyn Stream<Item = Result<Value>> + Send>>;
 }
 
@@ -60,16 +63,16 @@ pub trait StreamingExecution {
 pub struct StreamingConfig {
     /// Maximum number of concurrent executions
     pub max_concurrency: usize,
-    
+
     /// Buffer size for streaming operations
     pub buffer_size: usize,
-    
+
     /// Timeout for individual operations
     pub operation_timeout: std::time::Duration,
-    
+
     /// Whether to stop on first error or continue
     pub fail_fast: bool,
-    
+
     /// Enable resource monitoring for each operation
     pub monitor_resources: bool,
 }
@@ -109,20 +112,23 @@ impl StreamingExecutor {
 
 #[async_trait]
 impl StreamingExecution for StreamingExecutor {
-    async fn execute_stream<S>(&self, input: S) -> Pin<Box<dyn Stream<Item = FunctionResult> + Send>>
-    where 
-        S: Stream<Item = FunctionCall> + Send + 'static
+    async fn execute_stream<S>(
+        &self,
+        input: S,
+    ) -> Pin<Box<dyn Stream<Item = FunctionResult> + Send>>
+    where
+        S: Stream<Item = FunctionCall> + Send + 'static,
     {
         let instance_id = self.instance_id;
         let config = self.config.clone();
-        
+
         let stream = input
             .map(move |call| {
                 let _instance_id = instance_id;
                 let config = config.clone();
                 async move {
                     let start_time = std::time::Instant::now();
-                    
+
                     // Execute the function using the sandbox (simplified implementation)
                     // In a full implementation, this would integrate directly with the WasmInstance
                     let result = if call.function_name == "error_function" {
@@ -135,9 +141,9 @@ impl StreamingExecution for StreamingExecutor {
                         // TODO: Integrate with actual WasmSandbox.call_function
                         Ok(Value::String(format!("Result for {}", call.function_name)))
                     };
-                    
+
                     let execution_time = start_time.elapsed();
-                    
+
                     FunctionResult {
                         call,
                         result,
@@ -158,36 +164,40 @@ impl StreamingExecution for StreamingExecutor {
     }
 
     async fn execute_batch<I>(&self, calls: I) -> Vec<FunctionResult>
-    where 
+    where
         I: IntoIterator<Item = FunctionCall> + Send,
-        I::IntoIter: Send
+        I::IntoIter: Send,
     {
         let calls_vec: Vec<_> = calls.into_iter().collect();
         let stream = futures::stream::iter(calls_vec);
         let result_stream = self.execute_stream(stream).await;
-        
+
         result_stream.collect().await
     }
 
     async fn execute_with_streaming_input<S>(
         &self,
         function_name: &str,
-        input_stream: S
+        input_stream: S,
     ) -> Pin<Box<dyn Stream<Item = Result<Value>> + Send>>
-    where 
-        S: Stream<Item = Value> + Send + 'static
+    where
+        S: Stream<Item = Value> + Send + 'static,
     {
         let function_name = function_name.to_string();
-        
-        let stream = input_stream.map(move |_input_value| {
-            let function_name = function_name.clone();
-            async move {
-                // Simplified implementation for streaming input processing
-                // TODO: Integrate with actual WasmSandbox.call_function for streaming input
-                Ok(Value::String(format!("Processed {} with input", function_name)))
-            }
-        })
-        .buffer_unordered(self.config.max_concurrency);
+
+        let stream = input_stream
+            .map(move |_input_value| {
+                let function_name = function_name.clone();
+                async move {
+                    // Simplified implementation for streaming input processing
+                    // TODO: Integrate with actual WasmSandbox.call_function for streaming input
+                    Ok(Value::String(format!(
+                        "Processed {} with input",
+                        function_name
+                    )))
+                }
+            })
+            .buffer_unordered(self.config.max_concurrency);
 
         Box::pin(stream)
     }
@@ -195,15 +205,15 @@ impl StreamingExecution for StreamingExecutor {
     async fn execute_with_streaming_output(
         &self,
         function_name: &str,
-        parameters: &[Value]
+        parameters: &[Value],
     ) -> Pin<Box<dyn Stream<Item = Result<Value>> + Send>> {
         let function_name = function_name.to_string();
         let parameters = parameters.to_vec();
-        
+
         // Simplified implementation for streaming output
         // TODO: Integrate with actual WasmSandbox for functions that support streaming output
         // This would require the WASM function to support streaming protocols or chunked results
-        
+
         let stream = futures::stream::iter(0..5).map(move |i| {
             Ok(Value::Object({
                 let mut obj = serde_json::Map::new();

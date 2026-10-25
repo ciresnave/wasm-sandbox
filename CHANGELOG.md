@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.3] - Unreleased - README accuracy
+
+### Fixed
+
+- README no longer claims "network and filesystem limits" or `Loopback // Only localhost`. What is enforced today: instruction (fuel) limits and environment-variable allow-lists. Filesystem and network capabilities are not yet applied: the guest gets neither whatever is granted (fails closed). Applies to every earlier release; see #11.
+- README security example used APIs that do not exist (`FilesystemCapability::ReadOnly`, `InstanceConfig::max_memory`); replaced with a working one.
+
+### Added
+
+- `.github/CODEOWNERS` (`* @ciresnave`).
+
 ## [0.5.2] - Unreleased - Corrected security guide, examples
 
 ### Fixed

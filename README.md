@@ -42,12 +42,12 @@ let sandbox = WasmSandbox::builder()
 
 ## Key Features
 
-- **🔒 Security First**: Isolate untrusted code in WebAssembly sandboxes with fine-grained capability controls
+- **🔒 Security First**: Isolate untrusted code in WebAssembly sandboxes; the guest gets no filesystem, network or process access, and environment-variable allow-lists are enforced
 - **🚀 High Performance**: Efficient host-guest communication with minimal overhead
 - **🔧 Flexible APIs**: High-level convenience APIs and low-level control for advanced use cases
 - **📦 Multiple Runtimes**: Support for Wasmtime and Wasmer WebAssembly runtimes
 - **🌐 Application Wrappers**: Built-in support for HTTP servers, MCP servers, and CLI tools
-- **📊 Resource Control**: Memory, CPU, network, and filesystem limits with monitoring
+- **📊 Resource Control**: Instruction (fuel) limits and environment-variable allow-lists are enforced. Filesystem and network *capabilities* are not yet enforced: granting one does nothing, and the guest gets neither (see [#11](https://github.com/ciresnave/wasm-sandbox/issues/11))
 - **🔄 Async/Await**: Full async support for non-blocking operations
 
 ## ✨ NEW Major Additions in v0.4.0
@@ -204,22 +204,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Security Configuration
 
 ```rust
-use wasm_sandbox::{WasmSandbox, InstanceConfig};
-use wasm_sandbox::security::{Capabilities, NetworkCapability, FilesystemCapability};
+use wasm_sandbox::security::{Capabilities, ResourceLimits};
+use wasm_sandbox::{EnvironmentCapability, InstanceConfig};
 
-let mut capabilities = Capabilities::minimal();
-capabilities.network = NetworkCapability::Loopback;  // Only localhost
-capabilities.filesystem = FilesystemCapability::ReadOnly(vec!["./data".into()]);
+// Start from the most restrictive set and grant only what is needed.
+let capabilities = Capabilities {
+    environment: EnvironmentCapability::Allowlist(vec!["API_KEY".to_string()]),
+    ..Capabilities::minimal()
+};
 
 let config = InstanceConfig {
     capabilities,
-    max_memory: Some(64 * 1024 * 1024), // 64MB limit
-    max_execution_time: Some(std::time::Duration::from_secs(30)),
+    resource_limits: ResourceLimits {
+        fuel: Some(1_000_000), // instruction budget
+        ..ResourceLimits::default()
+    },
     ..Default::default()
 };
 
 let instance_id = sandbox.create_instance(module_id, Some(config))?;
 ```
+
+Today the runtime applies the environment allow-list and the fuel budget. `filesystem` and
+`network` capabilities are accepted but **not yet applied**: the guest has no filesystem or
+network access whatever you grant ([#11](https://github.com/ciresnave/wasm-sandbox/issues/11)).
+See the [Security Configuration guide](docs/guides/security-config.md) and the runnable
+[`examples/security_config.rs`](examples/security_config.rs).
 
 ### Resource Monitoring
 

@@ -39,9 +39,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             filesystem: FilesystemCapability {
                 readable_dirs: vec![std::env::current_dir()?],
                 writable_dirs: vec![std::env::temp_dir()],
+                // Writable directories need both flags and cannot cap file size.
                 allow_create: true,
-                allow_delete: false,
-                max_file_size: Some(1024 * 1024), // 1MB
+                allow_delete: true,
+                max_file_size: None,
             },
 
             // No environment access

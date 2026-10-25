@@ -392,9 +392,25 @@ impl WasmerRuntime {
     }
 
     /// Create a WASI environment with the given capabilities
-    fn create_wasi_env(&self, _capabilities: &Capabilities) -> Result<()> {
-        // For now, just return Ok(()) - we'll implement full WASI later
-        // when we have a better understanding of the wasmer-wasix API
+    ///
+    /// The Wasmer backend does not wire up WASI yet (instances get empty imports), so no
+    /// capability beyond the defaults can be applied. A grant that would be ignored is rejected
+    /// rather than silently accepted.
+    fn create_wasi_env(&self, capabilities: &Capabilities) -> Result<()> {
+        use crate::security::{EnvironmentCapability, NetworkCapability, ProcessCapability};
+
+        let fs = &capabilities.filesystem;
+        let unsupported = capabilities.network != NetworkCapability::None
+            || capabilities.process != ProcessCapability::None
+            || capabilities.environment != EnvironmentCapability::None
+            || !fs.readable_dirs.is_empty()
+            || !fs.writable_dirs.is_empty();
+        if unsupported {
+            return Err(Error::Capability {
+                message: "the Wasmer backend does not apply network, process, environment or                           filesystem capabilities yet; use Capabilities::minimal() or the Wasmtime                           backend"
+                    .to_string(),
+            });
+        }
         Ok(())
     }
 }

@@ -10,25 +10,25 @@ This guide covers how to configure wasm-sandbox's security settings: capabilitie
 > this page; see [#8](https://github.com/ciresnave/wasm-sandbox/issues/8). Everything below is checked against
 > the code and the runnable [`examples/security_config.rs`](../../examples/security_config.rs), which CI compiles.
 
-## What is enforced today
+## What is enforced
 
 WebAssembly itself isolates a module's memory and gives it no host access unless the host provides some.
-wasm-sandbox builds a WASI context per instance and does not add anything to it that you did not ask for.
-How much of your `Capabilities` is *applied* depends on the field (wasmtime backend, 0.5.x):
+wasm-sandbox builds a WASI context per instance and adds only what your `Capabilities` grant. With the
+wasmtime backend (0.6.x):
 
-| Setting | Applied to the instance? |
+| Setting | Behaviour |
 |---|---|
-| `environment` | **Yes.** Only the variables your `EnvironmentCapability` allows are passed to the guest. |
-| `filesystem` | **No.** The directory lists are accepted, but the backend only logs "Directory access capabilities are not yet fully implemented"; no directory is opened to the guest. |
-| `network` | **No.** The value is stored but the runtime never reads it; no sockets are given to the guest. |
-| `process`, `time`, `random`, `custom` | Stored only; not applied. |
-| `ResourceLimits::fuel` | **Yes** for the wasmtime backend: fuel is set when the instance is created. |
+| `environment` | **Applied.** Only the variables your `EnvironmentCapability` allows are passed to the guest. |
+| `filesystem.readable_dirs` | **Applied.** Each directory is preopened read-only. |
+| `filesystem.writable_dirs` | **Applied.** Each directory is preopened read-write (create, delete and modify together). Requires `allow_create` **and** `allow_delete` to be `true` and `max_file_size` to be `None`; anything else is an `Error::Capability`. |
+| `network` | **Not supported.** Anything other than `NetworkCapability::None` makes `create_instance` fail with `Error::Capability`. Core WebAssembly modules have no socket API, so there is nothing to grant. |
+| `process` | **Not supported.** Anything other than `ProcessCapability::None` is an `Error::Capability`. |
+| `time`, `random`, `custom` | Stored only; not applied. |
+| `ResourceLimits::fuel` | **Applied** (wasmtime backend): fuel is set when the instance is created. |
 
-Because the guest is given no directories and no sockets to begin with, **an unapplied grant fails closed**:
-the module simply cannot reach the file or host you "granted". It does not fail open. If you need a guest to
-read files or open connections today, this crate does not provide that yet; see the roadmap in
-[`ROADMAP.md`](../../ROADMAP.md). The other `ResourceLimits` fields exist in the type; this guide does not
-claim they are enforced.
+A grant this backend cannot honour is an error, not a silent no-op, so a configuration that creates an
+instance does what it says. The wasmer backend does not apply filesystem grants yet ([#11](https://github.com/ciresnave/wasm-sandbox/issues/11)).
+The other `ResourceLimits` fields exist in the type; this guide does not claim they are enforced.
 
 ## Quick start - secure defaults
 
@@ -53,10 +53,9 @@ list. Build it from `Capabilities::minimal()` and override only what you need:
 
 ```rust
 use wasm_sandbox::security::Capabilities;
-use wasm_sandbox::{EnvironmentCapability, NetworkCapability};
+use wasm_sandbox::EnvironmentCapability;
 
 let capabilities = Capabilities {
-    network: NetworkCapability::Loopback,
     environment: EnvironmentCapability::Allowlist(vec!["API_KEY".to_string()]),
     ..Capabilities::minimal()
 };
@@ -79,24 +78,14 @@ A single enum value:
 
 | Variant | Meaning |
 |---|---|
-| `None` | No network access (the default). |
+| `None` | No network access (the default, and the only value the wasmtime backend accepts today). |
 | `Loopback` | Localhost only. |
 | `AllowedHosts(Vec<HostSpec>)` | Specific hosts; `HostSpec { host, ports: Option<PortRange>, secure }`. |
 | `AllowedPorts(Vec<PortRange>)` | Specific ports; `PortRange::new(start, end)`. |
 | `Full` | Unrestricted. |
 
-```rust
-use wasm_sandbox::security::{HostSpec, PortRange};
-
-let network = NetworkCapability::AllowedHosts(vec![HostSpec {
-    host: "api.example.com".to_string(),
-    ports: Some(PortRange::new(443, 443)),
-    secure: true,
-}]);
-```
-
-There is no separate "connect" and "listen" permission: `NetworkCapability::Connect` and `::Listen` do not
-exist. As the table above says, the network value is not yet applied by the runtime.
+Only `None` can be applied: with any other variant, `create_instance` returns `Error::Capability`. There is
+no separate "connect" and "listen" permission (`NetworkCapability::Connect`/`::Listen` do not exist).
 
 ### Filesystem (`FilesystemCapability`)
 
@@ -108,13 +97,16 @@ use wasm_sandbox::FilesystemCapability;
 let filesystem = FilesystemCapability {
     readable_dirs: vec!["./input".into()],
     writable_dirs: vec!["./output".into()],
-    max_file_size: Some(10 * 1024 * 1024),
-    allow_create: true,
-    allow_delete: false,
+    max_file_size: None,   // WASI cannot cap file size
+    allow_create: true,    // a writable directory needs both flags
+    allow_delete: true,
 };
 ```
 
-There are no per-file rules and no glob patterns. Not yet applied (see the table).
+Each directory must exist. The guest sees each directory as a WASI preopen mounted at the path you gave
+(with `\` written as `/`); preopens start at file descriptor 3, readable directories first, in the order
+listed. A directory listed as both readable and writable is mounted once, read-write. The guest cannot
+leave a preopened directory (for example with `..`). There are no per-file rules and no glob patterns.
 
 ### Environment variables (`EnvironmentCapability`)
 
@@ -188,8 +180,8 @@ match sandbox.call_function::<_, i32>(instance_id, "process", &input).await {
 1. **Least privilege.** Start from `Capabilities::minimal()` and name only what the module needs.
 2. **Set a fuel budget** you can justify; never leave untrusted code on `fuel: None`.
 3. **Validate input and output** of every call; the sandbox protects the host, not your data.
-4. **Do not rely on an unapplied capability for safety in either direction.** Today filesystem and network
-   grants do nothing, so test the behaviour you depend on rather than the configuration you wrote.
+4. **Test what the guest can do**, not just what the configuration says: the wasmer backend still ignores
+   filesystem grants, and `time`, `random` and `custom` are stored only.
 
 ## Checklist before production
 

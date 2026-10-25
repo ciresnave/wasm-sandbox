@@ -256,9 +256,9 @@ impl Capabilities {
             filesystem: FilesystemCapability {
                 readable_dirs: vec![std::env::current_dir().unwrap_or_default()],
                 writable_dirs: vec![std::env::temp_dir()],
-                max_file_size: Some(10 * 1024 * 1024), // 10MB
+                max_file_size: None, // WASI cannot cap file size
                 allow_create: true,
-                allow_delete: false,
+                allow_delete: true,
             },
             environment: EnvironmentCapability::Allowlist(vec![
                 "PATH".to_string(),

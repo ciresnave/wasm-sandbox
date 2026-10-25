@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use dashmap::DashMap;
 use wasmtime::{Config, Engine, Instance, Linker, Memory, Module, Store, Val};
 use wasmtime_wasi::{
-    WasiCtxBuilder,
+    FsPerms, WasiCtxBuilder,
     p1::{WasiP1Ctx, add_to_linker_sync},
 };
 
@@ -260,6 +260,13 @@ impl WasmInstance for WasmtimeInstance {
     }
 
     fn call_simple_function(&self, function_name: &str, params: &[i32]) -> Result<i32> {
+        // A guest that uses WASI would otherwise panic when called from a Tokio worker thread.
+        off_runtime(|| self.call_simple_function_blocking(function_name, params))
+    }
+}
+
+impl WasmtimeInstance {
+    fn call_simple_function_blocking(&self, function_name: &str, params: &[i32]) -> Result<i32> {
         let mut store_guard = self.store.lock().unwrap();
 
         // Get the function export
@@ -291,6 +298,104 @@ impl WasmInstance for WasmtimeInstance {
             }),
         }
     }
+}
+
+/// Run `f` on a thread that is not driving a Tokio runtime.
+///
+/// WASI preview 1 (`wasmtime-wasi`'s sync adapter) blocks on a runtime of its own for every call,
+/// which panics ("Cannot start a runtime from within a runtime") on a runtime worker thread. When
+/// we are on one, `f` runs on a short-lived scoped thread instead; otherwise it runs inline.
+fn off_runtime<R: Send>(f: impl FnOnce() -> R + Send) -> R {
+    if tokio::runtime::Handle::try_current().is_err() {
+        return f();
+    }
+    std::thread::scope(|scope| match scope.spawn(f).join() {
+        Ok(result) => result,
+        Err(panic) => std::panic::resume_unwind(panic),
+    })
+}
+
+/// A directory to preopen for the guest, with the permissions it was granted.
+#[derive(Debug, PartialEq)]
+struct Preopen {
+    host: std::path::PathBuf,
+    guest: String,
+    perms: FsPerms,
+}
+
+/// Refuse capability grants the Wasmtime core-module backend cannot apply.
+///
+/// A grant that is accepted but does nothing reads as a working permission, so these are
+/// errors rather than silent no-ops. WASI preview 1 has no socket API and no process API, cannot
+/// grant create, delete and modify separately (a preopen is read-only or read-write) and cannot
+/// cap file sizes.
+fn validate_capabilities(capabilities: &Capabilities) -> Result<()> {
+    use crate::security::{NetworkCapability, ProcessCapability};
+
+    let unsupported = |what: &str, why: &str| {
+        Err(Error::Capability {
+            message: format!("{what} is not supported by the Wasmtime backend: {why}"),
+        })
+    };
+
+    if capabilities.network != NetworkCapability::None {
+        return unsupported(
+            "a network capability",
+            "core modules have no socket API, so the guest has no network access; use NetworkCapability::None",
+        );
+    }
+    if capabilities.process != ProcessCapability::None {
+        return unsupported(
+            "a process capability",
+            "the guest cannot start processes; use ProcessCapability::None",
+        );
+    }
+
+    let fs = &capabilities.filesystem;
+    if !fs.writable_dirs.is_empty() {
+        if !(fs.allow_create && fs.allow_delete) {
+            return unsupported(
+                "writable_dirs without allow_create and allow_delete",
+                "a writable preopen allows creating, deleting and modifying files together; set both flags to true",
+            );
+        }
+        if fs.max_file_size.is_some() {
+            return unsupported(
+                "max_file_size",
+                "WASI cannot cap file sizes; set it to None",
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Directories to preopen, in fd order starting at 3. A directory listed as both readable and
+/// writable is mounted once, read-write. The guest sees each directory
+/// at the path it was given (with `\` written as `/`).
+fn preopen_plan(fs: &crate::security::FilesystemCapability) -> Vec<Preopen> {
+    let mut plan: Vec<Preopen> = Vec::new();
+
+    let mut add = |path: &std::path::Path, perms: FsPerms| {
+        if let Some(existing) = plan.iter_mut().find(|p| p.host == path) {
+            if perms == FsPerms::ReadWrite {
+                existing.perms = FsPerms::ReadWrite;
+            }
+        } else {
+            plan.push(Preopen {
+                host: path.to_path_buf(),
+                guest: path.to_string_lossy().replace('\\', "/"),
+                perms,
+            });
+        }
+    };
+
+    for dir in &fs.readable_dirs {
+        add(dir, FsPerms::ReadOnly);
+    }
+    for dir in &fs.writable_dirs {
+        add(dir, FsPerms::ReadWrite);
+    }
+    plan
 }
 
 /// Wasmtime runtime implementation
@@ -373,66 +478,8 @@ impl WasmtimeRuntime {
     }
 }
 
-impl WasmRuntime for WasmtimeRuntime {
-    fn initialize(&mut self, config: RuntimeConfig) -> Result<()> {
-        // Update configuration
-        self.config = config;
-
-        Ok(())
-    }
-
-    fn load_module(&self, wasm_bytes: &[u8]) -> Result<Box<dyn WasmModule>> {
-        // Compile the module
-        let start_time = std::time::Instant::now();
-
-        let module = Module::new(&self.engine, wasm_bytes)
-            .map_err(|e| Error::module_load_error(format!("Failed to compile module: {}", e)))?;
-
-        let elapsed_ms = start_time.elapsed().as_millis() as u64;
-
-        // Update metrics
-        {
-            let mut metrics = self.metrics.lock().unwrap();
-            metrics.compiled_modules += 1;
-            metrics.last_compilation_time_ms = Some(elapsed_ms);
-        }
-
-        // Create the module
-        let module = Arc::new(WasmtimeModule::new(module, wasm_bytes));
-        let id = module.id();
-
-        // Store in the modules map
-        self.modules.insert(id, module.clone());
-
-        Ok(Box::new(WasmtimeModule {
-            id,
-            name: module.name.clone(),
-            module: module.module.clone(),
-            exports: module.exports.clone(),
-            size: module.size,
-        }))
-    }
-
-    fn get_module(&self, id: ModuleId) -> Result<Arc<dyn WasmModule>> {
-        // Get the module
-        let module = self
-            .modules
-            .get(&id)
-            .ok_or_else(|| Error::config_error(format!("Module not found: {}", id), None))?;
-
-        // Return as Arc<dyn WasmModule>
-        let clone: Box<dyn WasmModule> = Box::new(WasmtimeModule {
-            id: module.id,
-            name: module.name.clone(),
-            module: module.module.clone(),
-            exports: module.exports.clone(),
-            size: module.size,
-        });
-
-        Ok(Arc::from(clone))
-    }
-
-    fn create_instance(
+impl WasmtimeRuntime {
+    fn create_instance_inner(
         &self,
         module: &dyn WasmModule,
         resources: ResourceLimits,
@@ -490,11 +537,20 @@ impl WasmRuntime for WasmtimeRuntime {
             }
         }
 
-        // Configure filesystem capabilities - simplified version for now
-        // In a real implementation, this would properly handle directory access permissions
-        if !capabilities.filesystem.readable_dirs.is_empty() {
-            // Just log that we'd be configuring dirs
-            log::warn!("Directory access capabilities are not yet fully implemented");
+        // Reject grants this backend cannot apply, then preopen the granted directories.
+        // Preopens are the only filesystem access the guest gets; fds 0-2 are stdio, so the
+        // first preopened directory is fd 3, in the order returned by `preopen_plan`.
+        validate_capabilities(&capabilities)?;
+        for dir in preopen_plan(&capabilities.filesystem) {
+            wasi_builder
+                .preopened_dir(&dir.host, &dir.guest, dir.perms)
+                .map_err(|e| Error::Capability {
+                    message: format!(
+                        "cannot preopen directory '{}' for the guest: {}",
+                        dir.host.display(),
+                        e
+                    ),
+                })?;
         }
 
         // Build the WASI context
@@ -563,6 +619,76 @@ impl WasmRuntime for WasmtimeRuntime {
         }
 
         Ok(Box::new(instance) as Box<dyn WasmInstance>)
+    }
+}
+
+impl WasmRuntime for WasmtimeRuntime {
+    fn initialize(&mut self, config: RuntimeConfig) -> Result<()> {
+        // Update configuration
+        self.config = config;
+
+        Ok(())
+    }
+
+    fn load_module(&self, wasm_bytes: &[u8]) -> Result<Box<dyn WasmModule>> {
+        // Compile the module
+        let start_time = std::time::Instant::now();
+
+        let module = Module::new(&self.engine, wasm_bytes)
+            .map_err(|e| Error::module_load_error(format!("Failed to compile module: {}", e)))?;
+
+        let elapsed_ms = start_time.elapsed().as_millis() as u64;
+
+        // Update metrics
+        {
+            let mut metrics = self.metrics.lock().unwrap();
+            metrics.compiled_modules += 1;
+            metrics.last_compilation_time_ms = Some(elapsed_ms);
+        }
+
+        // Create the module
+        let module = Arc::new(WasmtimeModule::new(module, wasm_bytes));
+        let id = module.id();
+
+        // Store in the modules map
+        self.modules.insert(id, module.clone());
+
+        Ok(Box::new(WasmtimeModule {
+            id,
+            name: module.name.clone(),
+            module: module.module.clone(),
+            exports: module.exports.clone(),
+            size: module.size,
+        }))
+    }
+
+    fn get_module(&self, id: ModuleId) -> Result<Arc<dyn WasmModule>> {
+        // Get the module
+        let module = self
+            .modules
+            .get(&id)
+            .ok_or_else(|| Error::config_error(format!("Module not found: {}", id), None))?;
+
+        // Return as Arc<dyn WasmModule>
+        let clone: Box<dyn WasmModule> = Box::new(WasmtimeModule {
+            id: module.id,
+            name: module.name.clone(),
+            module: module.module.clone(),
+            exports: module.exports.clone(),
+            size: module.size,
+        });
+
+        Ok(Arc::from(clone))
+    }
+
+    fn create_instance(
+        &self,
+        module: &dyn WasmModule,
+        resources: ResourceLimits,
+        capabilities: Capabilities,
+    ) -> Result<Box<dyn WasmInstance>> {
+        // WASI preview 1 blocks on its own runtime, which panics on a Tokio worker thread.
+        off_runtime(|| self.create_instance_inner(module, resources, capabilities))
     }
 
     fn get_metrics(&self) -> RuntimeMetrics {

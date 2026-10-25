@@ -664,7 +664,10 @@ impl WasmSandboxBuilder {
         self
     }
 
-    /// Enable or disable file system access
+    /// Enable or disable read-only access to the current directory.
+    ///
+    /// `true` preopens the current directory read-only; it never grants write access (use
+    /// `InstanceConfig` with `writable_dirs` for that). `false` clears all directory grants.
     pub fn enable_file_access(mut self, enable: bool) -> Self {
         self.enable_file_access = Some(enable);
         self
@@ -704,25 +707,15 @@ impl WasmSandboxBuilder {
 
         if let Some(enable_files) = self.enable_file_access {
             if enable_files {
-                // Add current directory as readable/writable
+                // Read-only access to the current directory. Write access is never granted
+                // by this switch; use an explicit `writable_dirs` entry for that.
                 let current_dir = std::env::current_dir().unwrap_or_default();
                 self.config
                     .default_instance_config
                     .capabilities
                     .filesystem
                     .readable_dirs
-                    .push(current_dir.clone());
-                self.config
-                    .default_instance_config
-                    .capabilities
-                    .filesystem
-                    .writable_dirs
                     .push(current_dir);
-                self.config
-                    .default_instance_config
-                    .capabilities
-                    .filesystem
-                    .allow_create = true;
             } else {
                 // Clear file access
                 self.config
@@ -742,6 +735,11 @@ impl WasmSandboxBuilder {
                     .capabilities
                     .filesystem
                     .allow_create = false;
+                self.config
+                    .default_instance_config
+                    .capabilities
+                    .filesystem
+                    .allow_delete = false;
             }
         }
 

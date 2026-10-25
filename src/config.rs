@@ -77,7 +77,9 @@ pub struct FilesystemPolicy {
     pub read_paths: Vec<PathBuf>,
     pub write_paths: Vec<PathBuf>,
     pub temp_dir_access: bool,
-    pub max_file_size: usize,
+    /// File size cap. WASI cannot enforce one, so a `Some` value together with write paths is
+    /// rejected when the instance is created; leave it `None`.
+    pub max_file_size: Option<usize>,
     pub deny_all: bool,
 }
 
@@ -87,7 +89,7 @@ impl Default for FilesystemPolicy {
             read_paths: Vec::new(),
             write_paths: Vec::new(),
             temp_dir_access: false,
-            max_file_size: 10 * 1024 * 1024, // 10MB
+            max_file_size: None,
             deny_all: true,
         }
     }
@@ -302,7 +304,11 @@ impl InstanceConfigBuilder {
             capabilities.filesystem = FilesystemCapability {
                 readable_dirs: self.advanced_caps.filesystem.read_paths.clone(),
                 writable_dirs: self.advanced_caps.filesystem.write_paths.clone(),
-                max_file_size: Some(self.advanced_caps.filesystem.max_file_size as u64),
+                max_file_size: self
+                    .advanced_caps
+                    .filesystem
+                    .max_file_size
+                    .map(|n| n as u64),
                 allow_create: !self.advanced_caps.filesystem.write_paths.is_empty(),
                 allow_delete: !self.advanced_caps.filesystem.write_paths.is_empty(),
             };

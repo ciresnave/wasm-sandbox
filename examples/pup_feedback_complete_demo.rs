@@ -192,7 +192,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 read_paths: vec![data_path.clone().into(), config_path.clone().into()],
                 write_paths: vec![output_path.clone().into(), tmp_path.clone().into()],
                 temp_dir_access: true,
-                max_file_size: 100 * 1024 * 1024, // 100MB
+                max_file_size: None, // WASI cannot cap file size; must be None
                 deny_all: false,
             },
             env_vars: vec!["PUP_API_KEY".to_string(), "PUP_ENV".to_string()],

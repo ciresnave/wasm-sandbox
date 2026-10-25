@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.6.0] - Unreleased - Enforced filesystem capabilities, loud unsupported grants
+
+Part of #11 (not closed): filesystem is enforced on the Wasmtime backend and unsupported grants are errors there.
+
+### Breaking
+
+- **Grants the Wasmtime backend cannot honour are now `Error::Capability` at `create_instance`**, where
+  they were silently ignored before: any `network` other than `NetworkCapability::None`; any `process`
+  other than `ProcessCapability::None`; `writable_dirs` without `allow_create` **and** `allow_delete`
+  (a writable preopen creates, deletes and modifies together; wasmtime 50 has only read-only and
+  read-write preopens); `max_file_size` together with `writable_dirs` (WASI cannot cap file size); and a
+  granted directory that does not exist.
+- **The Wasmer backend (`wasmer-runtime`, non-Windows) rejects every network, process, environment and
+  filesystem grant** with `Error::Capability`: it wires up no WASI yet, so none can be applied. Only
+  `Capabilities::minimal()`-style configurations create instances there.
+- `AdvancedCapabilities.filesystem.max_file_size` (`FilesystemPolicy`) is now `Option<usize>` and defaults
+  to `None` (it defaulted to 10 MB, which would now always be an error). `Capabilities::development()` no
+  longer sets `max_file_size` and sets `allow_delete`.
+- `WasmSandbox::builder().enable_file_access(true)` now preopens the current directory **read-only** (it
+  never grants write access); previously it recorded read/write grants that did nothing.
+
+### Added
+
+- **Filesystem capabilities are applied** (Wasmtime): each `readable_dirs` entry is preopened read-only,
+  each `writable_dirs` entry read-write, at the path given (fds start at 3, readable first). The guest
+  cannot leave a preopened directory. Tests drive a hand-written WASI guest (`tests/fs_capability_test.rs`).
+- Instance creation and guest calls run on a short-lived thread when invoked from a Tokio runtime thread:
+  `wasmtime-wasi`'s synchronous preview-1 adapter blocks on a runtime of its own and panicked there
+  ("Cannot start a runtime from within a runtime") for any guest that used WASI.
+
+### Not yet
+
+- Network enforcement (needs the component-model path) and WASI for the Wasmer backend: tracked in #11.
+
 ## [0.5.3] - Unreleased - README accuracy
 
 ### Fixed

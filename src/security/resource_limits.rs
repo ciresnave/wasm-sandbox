@@ -716,7 +716,10 @@ mod tests {
         let pages = pages.to_vec();
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
-            let r: Vec<bool> = pages.iter().map(|p| tracker.check_allocation(*p).is_ok()).collect();
+            let r: Vec<bool> = pages
+                .iter()
+                .map(|p| tracker.check_allocation(*p).is_ok())
+                .collect();
             let _ = tx.send(r);
         });
         rx.recv_timeout(Duration::from_secs(5))

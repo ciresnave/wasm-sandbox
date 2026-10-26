@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] - Fix memory-growth deadlock
+## [0.7.3] - Unreleased - Fix memory-growth deadlock
 
 ### Fixed
 

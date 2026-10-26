@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased] - WASI for the Wasmer backend
+
+### Added
+
+- The Wasmer backend (`wasmer-runtime`, non-Windows) now instantiates modules that import WASI (`wasi_snapshot_preview1`, `wasix_32v1`) through wasix and applies the environment allow/deny-list and filesystem grants (`readable_dirs` read-only, `writable_dirs` read-write, same validation as Wasmtime). Before this a WASI module failed to instantiate on Wasmer, and every env/fs grant was rejected. Modules that import no WASI are instantiated as before.
+- Granted directories are served through a confining filesystem (`GrantFs`): read-only grants refuse every mutation, and any path whose real location is outside the granted directory is refused, so a symlink cannot lead the guest out. wasix also refuses to follow symlinks inside a grant.
+- `tests/wasmer_wasi_test.rs` observes what a guest can do (read, write, create, delete, `..` escape, symlink escape, environment, a real loopback `connect`).
+
+### Changed
+
+- Network and process grants are still rejected on Wasmer (`Error::Capability`), now with the reason "not supported yet". The guest gets no sockets: wasix's default runtime would hand it host networking, so the runtime is built with networking and the HTTP client removed. stdio is null, as on Wasmtime.
+- Differences from Wasmtime: the first granted directory is fd 4, not fd 3 (fd 3 is an empty in-memory root the guest can use as scratch space; it never touches the host).
+
 ## [0.7.3] - Unreleased - Fix memory-growth deadlock
 
 ### Fixed

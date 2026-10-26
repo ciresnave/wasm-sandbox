@@ -288,6 +288,8 @@ pub(crate) mod network_policy;
 pub mod wasm_common;
 #[cfg(feature = "wasmer-runtime")]
 pub mod wasmer;
+#[cfg(feature = "wasmer-runtime")]
+mod wasmer_fs;
 
 // Re-export runtimes for convenience
 #[cfg(feature = "wasmtime-runtime")]

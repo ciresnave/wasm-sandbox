@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- `MemoryResourceTracker::check_allocation` deadlocked whenever a growth-rate limit was set (the default `MemoryLimits` sets one): it locked the same std `Mutex` twice. It now takes the lock once. Closes #19.
+- `MemoryResourceTracker::check_allocation` deadlocked whenever a growth-rate limit was set (the default `MemoryLimits` sets one): it locked the same std `Mutex` twice, so calling `check_allocation` with a growth rate set hangs the calling thread. It now takes the lock once. Affects all published versions 0.1.0 through 0.7.2 (measured from the crates.io tarballs). Not reachable from guest code: nothing in the runtime calls it, so only an embedder calling this public API directly was exposed. No advisory; no yank. Closes #19.
 
 ## [0.7.2] - Unreleased - Patent sweep record: full claim read
 

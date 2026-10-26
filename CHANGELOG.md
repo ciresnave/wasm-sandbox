@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased] - Fix memory-growth deadlock
+
+### Fixed
+
+- `MemoryResourceTracker::check_allocation` deadlocked whenever a growth-rate limit was set (the default `MemoryLimits` sets one): it locked the same std `Mutex` twice. It now takes the lock once. Closes #19.
+
 ## [0.7.2] - Unreleased - Patent sweep record: full claim read
 
 ### Changed

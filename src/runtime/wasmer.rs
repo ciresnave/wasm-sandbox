@@ -5,8 +5,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock, mpsc};
 
 use wasmer::{Engine, Instance, Module, Store, Value, imports};
+use wasmer_wasix::WasiEnv;
+use wasmer_wasix::runtime::PluggableRuntime;
+use wasmer_wasix::runtime::task_manager::tokio::TokioTaskManager;
+use wasmer_wasix::virtual_fs::{MountFileSystem, NullFile};
+use wasmer_wasix::virtual_net::UnsupportedVirtualNetworking;
 
 use crate::error::{Error, Result};
+use crate::runtime::wasmer_fs::GrantFs;
 use crate::runtime::{
     ModuleId, RuntimeConfig, RuntimeMetrics, WasmFunctionCaller, WasmFunctionCallerAsync,
     WasmInstance, WasmInstanceState, WasmModule, WasmRuntime,
@@ -89,6 +95,104 @@ impl WasmModule for WasmerModule {
     }
 }
 
+/// What a WASI guest is granted: environment variables and preopened directories. Network and
+/// process grants are rejected before one of these is built, so they never appear here.
+#[derive(Debug, Default)]
+pub(crate) struct WasiGrants {
+    envs: Vec<(String, String)>,
+    preopens: Vec<crate::runtime::wasmtime::Preopen>,
+}
+
+/// The tokio runtime wasix runs its tasks on. It lives for the whole process so that dropping a
+/// `WasmerRuntime` inside async code cannot panic by dropping a runtime there.
+fn wasix_tokio_handle() -> tokio::runtime::Handle {
+    static RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
+    RUNTIME
+        .get_or_init(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_name("wasix-tokio")
+                .enable_all()
+                .build()
+                .expect("failed to start the tokio runtime wasix needs")
+        })
+        .handle()
+        .clone()
+}
+
+/// True if the module imports from a WASI namespace (`wasi_snapshot_preview1`, `wasix_32v1`, ...).
+fn imports_wasi(module: &Module) -> bool {
+    module.imports().any(|i| i.module().starts_with("wasi"))
+}
+
+/// Instantiate a WASI module with exactly the granted environment and directories.
+///
+/// wasix's default runtime would give the guest real host sockets, so the runtime is built by
+/// hand with networking and the HTTP client removed. stdio is null, as in the Wasmtime backend.
+/// The returned `WasiFunctionEnv` must outlive the instance.
+fn instantiate_wasi(
+    store: &mut Store,
+    engine: &Engine,
+    module: &Module,
+    grants: &WasiGrants,
+) -> std::result::Result<(Instance, wasmer_wasix::WasiFunctionEnv), String> {
+    let _guard = wasix_tokio_handle().enter();
+    let mut runtime = PluggableRuntime::new(Arc::new(TokioTaskManager::new(wasix_tokio_handle())));
+    runtime.set_engine(engine.clone());
+    runtime.set_networking_implementation(UnsupportedVirtualNetworking::default());
+    runtime.http_client = None;
+
+    let mut builder = WasiEnv::builder("sandbox")
+        .runtime(Arc::new(runtime))
+        .stdin(Box::new(NullFile::default()))
+        .stdout(Box::new(NullFile::default()))
+        .stderr(Box::new(NullFile::default()))
+        .envs(grants.envs.iter().cloned());
+    // The guest's root is an empty in-memory directory; each grant is mounted at the path the
+    // guest sees it under and preopened, and nothing else of the host is reachable.
+    let mounts = MountFileSystem::new();
+    mounts
+        .mount(
+            "/",
+            Arc::new(wasmer_wasix::virtual_fs::mem_fs::FileSystem::default()),
+        )
+        .map_err(|e| e.to_string())?;
+    let mut mounted = Vec::new();
+    for dir in &grants.preopens {
+        let writable = dir.perms == wasmtime_wasi::FsPerms::ReadWrite;
+        let fs = GrantFs::new(wasix_tokio_handle(), &dir.host, !writable).map_err(|e| {
+            format!(
+                "cannot preopen directory '{}' for the guest: {e}",
+                dir.host.display()
+            )
+        })?;
+        mounts.mount(&dir.guest, fs).map_err(|e| {
+            format!(
+                "cannot mount directory '{}' for the guest: {e}",
+                dir.host.display()
+            )
+        })?;
+        mounted.push((dir.guest.clone(), writable));
+    }
+    builder = builder.mount_fs(mounts);
+    for (guest, writable) in mounted {
+        // The rights wasix gives a preopen come from these flags; the mount enforces them again.
+        builder = builder
+            .preopen_build(move |p| {
+                let p = p.directory(&guest).alias(&guest).read(true);
+                if writable {
+                    p.write(true).create(true)
+                } else {
+                    p
+                }
+            })
+            .map_err(|e| e.to_string())?;
+    }
+    builder
+        .instantiate(module.clone(), store)
+        .map_err(|e| e.to_string())
+}
+
 /// A request to the thread that owns a Wasmer `Store`.
 enum StoreRequest {
     MemoryUsage(mpsc::Sender<usize>),
@@ -125,25 +229,47 @@ impl WasmerInstance {
     /// Create a new Wasmer instance: spawns the store-owning thread and instantiates `module`
     /// on it, returning once instantiation has succeeded or failed.
     pub fn new(engine: Engine, module: Module, module_id: ModuleId) -> Result<Self> {
+        Self::with_grants(engine, module, module_id, WasiGrants::default())
+    }
+
+    /// Like [`WasmerInstance::new`], but a module that imports WASI is instantiated with the
+    /// environment and directories in `grants`; other modules ignore them.
+    pub(crate) fn with_grants(
+        engine: Engine,
+        module: Module,
+        module_id: ModuleId,
+        grants: WasiGrants,
+    ) -> Result<Self> {
         let (requests, inbox) = mpsc::channel::<StoreRequest>();
         let (ready_tx, ready_rx) = mpsc::channel::<Result<()>>();
 
         std::thread::Builder::new()
             .name("wasmer-store".to_string())
             .spawn(move || {
-                let mut store = Store::new(engine);
-                // Imports are empty for now - WASI imports are not yet wired up
-                let imports = imports! {};
-                let instance = match Instance::new(&mut store, &module, &imports) {
+                let mut store = Store::new(engine.clone());
+                // Held for the life of the thread: the instance's WASI imports point into it.
+                let mut wasi_env = None;
+                let created = if imports_wasi(&module) {
+                    instantiate_wasi(&mut store, &engine, &module, &grants).map(
+                        |(instance, env)| {
+                            wasi_env = Some(env);
+                            instance
+                        },
+                    )
+                } else {
+                    Instance::new(&mut store, &module, &imports! {}).map_err(|e| e.to_string())
+                };
+                let instance = match created {
                     Ok(instance) => instance,
-                    Err(e) => {
+                    Err(reason) => {
                         let _ = ready_tx.send(Err(Error::InstanceCreation {
-                            reason: e.to_string(),
+                            reason,
                             instance_id: Some(module_id.as_uuid()),
                         }));
                         return;
                     }
                 };
+                let _keep_wasi_env_alive = wasi_env;
                 let memory = instance.exports.get_memory("memory").ok().cloned();
                 let _ = ready_tx.send(Ok(()));
 
@@ -391,27 +517,46 @@ impl WasmerRuntime {
         })
     }
 
-    /// Create a WASI environment with the given capabilities
+    /// Work out what a WASI guest is granted from `capabilities`.
     ///
-    /// The Wasmer backend does not wire up WASI yet (instances get empty imports), so no
-    /// capability beyond the defaults can be applied. A grant that would be ignored is rejected
-    /// rather than silently accepted.
-    fn create_wasi_env(&self, capabilities: &Capabilities) -> Result<()> {
+    /// Environment variables and directories are applied. Network and process grants are
+    /// rejected: wasix could carry them out, but only with an allowlist this crate has not
+    /// built, and a grant that would be ignored must not read as a working permission.
+    fn create_wasi_env(&self, capabilities: &Capabilities) -> Result<WasiGrants> {
         use crate::security::{EnvironmentCapability, NetworkCapability, ProcessCapability};
 
-        let fs = &capabilities.filesystem;
-        let unsupported = capabilities.network != NetworkCapability::None
-            || capabilities.process != ProcessCapability::None
-            || capabilities.environment != EnvironmentCapability::None
-            || !fs.readable_dirs.is_empty()
-            || !fs.writable_dirs.is_empty();
-        if unsupported {
+        if capabilities.network != NetworkCapability::None {
             return Err(Error::Capability {
-                message: "the Wasmer backend does not apply network, process, environment or                           filesystem capabilities yet; use Capabilities::minimal() or the Wasmtime                           backend"
-                    .to_string(),
+                message: "a network capability is not supported by the Wasmer backend yet; use NetworkCapability::None or the Wasmtime component backend".to_string(),
             });
         }
-        Ok(())
+        if capabilities.process != ProcessCapability::None {
+            return Err(Error::Capability {
+                message: "a process capability is not supported by the Wasmer backend; use ProcessCapability::None".to_string(),
+            });
+        }
+        crate::runtime::wasmtime::validate_filesystem(&capabilities.filesystem)?;
+        let preopens = crate::runtime::wasmtime::preopen_plan(&capabilities.filesystem);
+        if let Some(missing) = preopens.iter().find(|p| !p.host.is_dir()) {
+            return Err(Error::Capability {
+                message: format!(
+                    "cannot preopen directory '{}' for the guest: it is not an existing directory",
+                    missing.host.display()
+                ),
+            });
+        }
+
+        let envs = match &capabilities.environment {
+            EnvironmentCapability::None => Vec::new(),
+            EnvironmentCapability::Allowlist(vars) => {
+                std::env::vars().filter(|(k, _)| vars.contains(k)).collect()
+            }
+            EnvironmentCapability::Denylist(vars) => std::env::vars()
+                .filter(|(k, _)| !vars.contains(k))
+                .collect(),
+            EnvironmentCapability::Full => std::env::vars().collect(),
+        };
+        Ok(WasiGrants { envs, preopens })
     }
 }
 
@@ -488,14 +633,14 @@ impl WasmRuntime for WasmerRuntime {
                     instance_id: None,
                 })?;
 
-        // Create WASI environment (simplified for now)
-        self.create_wasi_env(&capabilities)?;
+        let grants = self.create_wasi_env(&capabilities)?;
 
         // Instantiate on the thread that will own the (non-Send) store
-        let wasmer_instance = WasmerInstance::new(
+        let wasmer_instance = WasmerInstance::with_grants(
             self.engine.clone(),
             wasmer_module.module.clone(),
             module.id(),
+            grants,
         )?;
 
         // Update metrics

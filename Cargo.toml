@@ -1,6 +1,6 @@
 [package]
 name = "wasm-sandbox"
-version = "0.7.2"
+version = "0.7.3"
 edition = "2024"
 rust-version = "1.97"
 description = "A secure WebAssembly sandbox with dead-simple ease of use, progressive complexity APIs, and comprehensive safety controls"
@@ -26,7 +26,9 @@ exclude = [
 
 [dependencies]
 # WebAssembly runtime
-wasmtime = { version = "50.0.0", features = ["async", "cache", "cranelift", "component-model"] }
+# wasmtime default features minus "cache": nothing here uses the on-disk compilation cache, and it
+# pulls zstd 0.13 (RUSTSEC-2026-0391/0398/0403), which wasmtime 50.0.0 pins below the fixed 0.14.
+wasmtime = { version = "50.0.0", default-features = false, features = ["anyhow", "async", "backtrace", "gc", "gc-copying", "gc-drc", "gc-null", "wat", "profiling", "parallel-compilation", "cranelift", "pooling-allocator", "demangle", "addr2line", "coredump", "debug-builtins", "runtime", "component-model", "component-model-async", "threads", "stack-switching", "std", "debug", "compile-time-builtins", "wit-parser"] }
 wasmtime-wasi = "50.0.0"
 
 # Security: Force minimum versions for security fixes

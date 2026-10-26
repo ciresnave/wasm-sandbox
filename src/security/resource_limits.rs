@@ -76,9 +76,10 @@ impl MemoryResourceTracker {
         }
 
         // Check growth rate
-        if let Some(max_rate) = self.growth_tracker.lock().unwrap().max_rate {
+        // One guard for the whole check: locking twice here deadlocked (std Mutex).
+        let mut tracker = self.growth_tracker.lock().unwrap();
+        if let Some(max_rate) = tracker.max_rate {
             let now = Instant::now();
-            let mut tracker = self.growth_tracker.lock().unwrap();
 
             // Clean up old events
             let cutoff = now - tracker.window;
@@ -692,5 +693,51 @@ impl ResourceLimitManager {
                 let _ = cpu_tracker.check_time_limit();
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    fn limits(max_growth_rate: Option<u32>) -> MemoryLimits {
+        MemoryLimits {
+            max_memory_pages: 1000,
+            reserved_memory_pages: 0,
+            max_growth_rate,
+            max_tables: 1,
+        }
+    }
+
+    /// Runs `check_allocation` on a thread so a regression fails instead of hanging.
+    fn check(max_rate: Option<u32>, pages: &[u32]) -> Vec<bool> {
+        let tracker = MemoryResourceTracker::new(&limits(max_rate));
+        let pages = pages.to_vec();
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let r: Vec<bool> = pages
+                .iter()
+                .map(|p| tracker.check_allocation(*p).is_ok())
+                .collect();
+            let _ = tx.send(r);
+        });
+        rx.recv_timeout(Duration::from_secs(5))
+            .expect("check_allocation deadlocked")
+    }
+
+    #[test]
+    fn check_allocation_with_growth_rate_does_not_deadlock() {
+        assert_eq!(check(Some(10), &[4]), vec![true]);
+    }
+
+    #[test]
+    fn growth_rate_limit_rejects_excess_within_window() {
+        assert_eq!(check(Some(10), &[6, 6]), vec![true, false]);
+    }
+
+    #[test]
+    fn no_growth_rate_means_only_the_page_limit_applies() {
+        assert_eq!(check(None, &[500, 600]), vec![true, true]);
     }
 }

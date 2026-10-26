@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.3] - Unreleased - Fix memory-growth deadlock
+
+### Fixed
+
+- `MemoryResourceTracker::check_allocation` deadlocked whenever a growth-rate limit was set (the default `MemoryLimits` sets one): it locked the same std `Mutex` twice, so calling `check_allocation` with a growth rate set hangs the calling thread. It now takes the lock once. Affects all published versions 0.1.0 through 0.7.2 (measured from the crates.io tarballs). Not reachable from guest code: nothing in the runtime calls it, so only an embedder calling this public API directly was exposed. No advisory; no yank. Closes #19.
+
+### Changed
+
+- Dropped wasmtime's `cache` feature (nothing here used the on-disk compilation cache). It was the only path to `zstd 0.13.3`/`zstd-safe 7.3.0`, which `cargo deny` now flags (RUSTSEC-2026-0391, RUSTSEC-2026-0398, RUSTSEC-2026-0403); wasmtime 50.0.0 pins zstd `^0.13`, below the fixed 0.14.3 / zstd-safe 8.2.0, so a lockfile update could not reach them. zstd is no longer in the dependency tree. **The wasmtime compilation cache (`cache` feature) is therefore no longer enabled**; wasm-sandbox never exposed or used it, but an embedder that relied on it through feature unification (their own `wasmtime` dependency) must enable `cache` themselves, accepting zstd 0.13 until wasmtime moves to a fixed zstd.
+
 ## [0.7.2] - Unreleased - Patent sweep record: full claim read
 
 ### Changed

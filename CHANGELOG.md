@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] - WASI for the Wasmer backend
+## [0.7.4] - Unreleased - WASI for the Wasmer backend
 
 ### Added
 

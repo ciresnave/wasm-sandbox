@@ -1,5 +1,5 @@
-//! WASI enforcement on the Wasmer backend (wasix): environment and filesystem grants are applied,
-//! network and process grants are rejected, and the guest gets no sockets.
+//! WASI enforcement on the Wasmer backend (wasix): environment, filesystem and network grants are
+//! applied, a process grant is rejected, and with no network grant the guest gets no sockets.
 //!
 //! Same method as `fs_capability_test.rs`: a hand-written WAT guest calls WASI directly and
 //! returns the raw errno, so each test observes what the guest can really do. Wasmer builds on
@@ -33,6 +33,10 @@ const GUEST: &str = r#"
     (func $sock_open (param i32 i32 i32 i32) (result i32)))
   (import "wasix_32v1" "sock_connect"
     (func $sock_connect (param i32 i32) (result i32)))
+  (import "wasix_32v1" "sock_bind"
+    (func $sock_bind (param i32 i32) (result i32)))
+  (import "wasix_32v1" "sock_listen"
+    (func $sock_listen (param i32 i32) (result i32)))
   (memory (export "memory") 1)
   (data (i32.const 100) "hello.txt")
   (data (i32.const 120) "new.txt")
@@ -68,16 +72,41 @@ const GUEST: &str = r#"
     (i32.store (i32.const 404) (i32.const 5))
     (call $fd_write (i32.load (i32.const 200)) (i32.const 400) (i32.const 1) (i32.const 408)))
 
-  ;; open a TCP socket and connect it to 127.0.0.1:$port; returns the first errno that fails
-  (func (export "connect_loopback") (param $port i32) (result i32)
+  ;; write the IPv4 address $ip (a<<24|b<<16|c<<8|d) and $port at 700 as wasix reads it:
+  ;; tag (1 = IPv4) at +0, port (little endian) at +2, the four address bytes at +4
+  (func $mkaddr (param $ip i32) (param $port i32)
+    (i32.store8 (i32.const 700) (i32.const 1))
+    (i32.store16 (i32.const 702) (local.get $port))
+    (i32.store8 (i32.const 704) (i32.shr_u (local.get $ip) (i32.const 24)))
+    (i32.store8 (i32.const 705) (i32.shr_u (local.get $ip) (i32.const 16)))
+    (i32.store8 (i32.const 706) (i32.shr_u (local.get $ip) (i32.const 8)))
+    (i32.store8 (i32.const 707) (local.get $ip)))
+
+  ;; open a TCP socket and connect it to $ip:$port; returns the first errno that fails
+  (func (export "connect_to") (param $ip i32) (param $port i32) (result i32)
     (local $e i32)
     (local.set $e (call $sock_open (i32.const 1) (i32.const 1) (i32.const 6) (i32.const 600)))
     (if (local.get $e) (then (return (local.get $e))))
-    (i32.store8 (i32.const 700) (i32.const 1))
-    (i32.store16 (i32.const 701) (local.get $port))
-    (i32.store8 (i32.const 703) (i32.const 127))
-    (i32.store8 (i32.const 706) (i32.const 1))
+    (call $mkaddr (local.get $ip) (local.get $port))
     (call $sock_connect (i32.load (i32.const 600)) (i32.const 700)))
+
+  ;; open a TCP socket and bind it to $ip:$port without listening
+  (func (export "bind_to") (param $ip i32) (param $port i32) (result i32)
+    (local $e i32)
+    (local.set $e (call $sock_open (i32.const 1) (i32.const 1) (i32.const 6) (i32.const 600)))
+    (if (local.get $e) (then (return (local.get $e))))
+    (call $mkaddr (local.get $ip) (local.get $port))
+    (call $sock_bind (i32.load (i32.const 600)) (i32.const 700)))
+
+  ;; open a TCP socket, bind it to $ip:$port and listen
+  (func (export "listen_on") (param $ip i32) (param $port i32) (result i32)
+    (local $e i32)
+    (local.set $e (call $sock_open (i32.const 1) (i32.const 1) (i32.const 6) (i32.const 600)))
+    (if (local.get $e) (then (return (local.get $e))))
+    (call $mkaddr (local.get $ip) (local.get $port))
+    (local.set $e (call $sock_bind (i32.load (i32.const 600)) (i32.const 700)))
+    (if (local.get $e) (then (return (local.get $e))))
+    (call $sock_listen (i32.load (i32.const 600)) (i32.const 8)))
 
   ;; number of environment variables the guest can see
   (func (export "env_count") (param i32) (result i32)
@@ -250,9 +279,7 @@ fn guest_cannot_reach_the_host_network() {
     let port = listener.local_addr().unwrap().port();
 
     let instance = instantiate(Capabilities::minimal()).expect("instance");
-    let errno = instance
-        .call_simple_function("connect_loopback", &[i32::from(port)])
-        .expect("call");
+    let errno = connect(instance.as_ref(), LOOPBACK, port);
     eprintln!("connect errno: {errno}");
     assert_ne!(errno, WASI_ERRNO_SUCCESS, "connect must fail");
     std::thread::sleep(std::time::Duration::from_millis(200));
@@ -262,15 +289,156 @@ fn guest_cannot_reach_the_host_network() {
     );
 }
 
+const LOOPBACK: i32 = 0x7f00_0001;
+const LOOPBACK_2: i32 = 0x7f00_0002;
+/// 192.0.2.1, reserved for documentation and never routed.
+const TEST_NET: i32 = 0xc000_0201_u32 as i32;
+const UNSPECIFIED: i32 = 0;
+
+fn net_caps(network: NetworkCapability) -> Capabilities {
+    Capabilities {
+        network,
+        ..Capabilities::minimal()
+    }
+}
+
+fn host_rule(host: &str) -> NetworkCapability {
+    NetworkCapability::AllowedHosts(vec![wasm_sandbox::security::HostSpec {
+        host: host.into(),
+        ports: None,
+        secure: false,
+    }])
+}
+
+fn connect(instance: &dyn WasmInstance, ip: i32, port: u16) -> i32 {
+    instance
+        .call_simple_function("connect_to", &[ip, i32::from(port)])
+        .expect("call connect_to")
+}
+
+/// A host listener on every IPv4 address, so a connect to 127.0.0.2 would succeed if the policy
+/// let it through. Returns the listener and its port.
+fn host_listener() -> (std::net::TcpListener, u16) {
+    let listener = std::net::TcpListener::bind("0.0.0.0:0").expect("bind");
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    (listener, port)
+}
+
+fn saw_connection(listener: &std::net::TcpListener) -> bool {
+    for _ in 0..20 {
+        if listener.accept().is_ok() {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    false
+}
+
+#[test]
+fn full_network_lets_the_guest_connect() {
+    let (listener, port) = host_listener();
+    let instance = instantiate(net_caps(NetworkCapability::Full)).expect("instance");
+    assert_eq!(
+        connect(instance.as_ref(), LOOPBACK, port),
+        WASI_ERRNO_SUCCESS
+    );
+    assert!(
+        saw_connection(&listener),
+        "the host listener sees the guest"
+    );
+}
+
+#[test]
+fn loopback_network_allows_loopback_and_refuses_the_rest() {
+    let (listener, port) = host_listener();
+    let instance = instantiate(net_caps(NetworkCapability::Loopback)).expect("instance");
+    let i = instance.as_ref();
+    assert_eq!(connect(i, LOOPBACK, port), WASI_ERRNO_SUCCESS);
+    assert!(saw_connection(&listener));
+    let denied = connect(i, TEST_NET, port);
+    eprintln!("denied connect errno: {denied}");
+    assert_ne!(denied, WASI_ERRNO_SUCCESS, "192.0.2.1 is not loopback");
+}
+
+#[test]
+fn allowed_ports_network_checks_the_port() {
+    let (listener, port) = host_listener();
+    let (other, other_port) = host_listener();
+    let instance = instantiate(net_caps(NetworkCapability::AllowedPorts(vec![
+        wasm_sandbox::security::PortRange::new(port, port),
+    ])))
+    .expect("instance");
+    let i = instance.as_ref();
+    assert_eq!(connect(i, LOOPBACK, port), WASI_ERRNO_SUCCESS);
+    assert!(saw_connection(&listener));
+    assert_ne!(connect(i, LOOPBACK, other_port), WASI_ERRNO_SUCCESS);
+    assert!(
+        !saw_connection(&other),
+        "the out-of-range listener sees nothing"
+    );
+}
+
+#[test]
+fn allowed_hosts_network_checks_the_address() {
+    let (listener, port) = host_listener();
+    let instance = instantiate(net_caps(host_rule("127.0.0.1"))).expect("instance");
+    let i = instance.as_ref();
+    assert_eq!(connect(i, LOOPBACK, port), WASI_ERRNO_SUCCESS);
+    assert!(saw_connection(&listener));
+    // 127.0.0.2 reaches the same 0.0.0.0 listener if it is let through.
+    assert_ne!(connect(i, LOOPBACK_2, port), WASI_ERRNO_SUCCESS);
+    assert!(!saw_connection(&listener), "127.0.0.2 must not get through");
+}
+
+#[test]
+fn listening_and_explicit_binds_need_a_capability_that_allows_them() {
+    let free = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let call2 = |i: &dyn WasmInstance, name: &str, ip: i32| {
+        i.call_simple_function(name, &[ip, i32::from(free)])
+            .expect("call")
+    };
+    // Positive control: loopback may listen on a loopback port.
+    let instance = instantiate(net_caps(NetworkCapability::Loopback)).expect("instance");
+    assert_eq!(
+        call2(instance.as_ref(), "listen_on", LOOPBACK),
+        WASI_ERRNO_SUCCESS
+    );
+    // The wildcard address is not loopback.
+    let instance = instantiate(net_caps(NetworkCapability::Loopback)).expect("instance");
+    assert_ne!(
+        call2(instance.as_ref(), "listen_on", UNSPECIFIED),
+        WASI_ERRNO_SUCCESS
+    );
+    // A host rule describes outbound peers only: no explicit bind, no listen.
+    let instance = instantiate(net_caps(host_rule("127.0.0.1"))).expect("instance");
+    assert_ne!(
+        call2(instance.as_ref(), "bind_to", LOOPBACK),
+        WASI_ERRNO_SUCCESS
+    );
+    assert_ne!(
+        call2(instance.as_ref(), "listen_on", LOOPBACK),
+        WASI_ERRNO_SUCCESS
+    );
+}
+
 #[test]
 fn unsupported_or_unsatisfiable_grants_are_loud_errors() {
     let dir = host_dir();
     let err = |caps: Capabilities| matches!(instantiate(caps), Err(Error::Capability { .. }));
 
-    assert!(err(Capabilities {
-        network: NetworkCapability::Loopback,
-        ..Capabilities::minimal()
-    }));
+    // A host rule marked `secure` cannot be enforced at the socket level.
+    assert!(err(net_caps(NetworkCapability::AllowedHosts(vec![
+        wasm_sandbox::security::HostSpec {
+            host: "127.0.0.1".into(),
+            ports: None,
+            secure: true,
+        },
+    ]))));
     assert!(err(Capabilities {
         process: wasm_sandbox::ProcessCapability::Full,
         ..Capabilities::minimal()

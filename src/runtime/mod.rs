@@ -290,6 +290,8 @@ pub mod wasm_common;
 pub mod wasmer;
 #[cfg(feature = "wasmer-runtime")]
 mod wasmer_fs;
+#[cfg(feature = "wasmer-runtime")]
+mod wasmer_net;
 
 // Re-export runtimes for convenience
 #[cfg(feature = "wasmtime-runtime")]

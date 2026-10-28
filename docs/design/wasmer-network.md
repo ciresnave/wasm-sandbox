@@ -1,7 +1,7 @@
 # Plan: network capability on the Wasmer backend
 
-Status: **plan only; no code.** Written 2026-10-28 at `main` 288eb26 (0.7.4) for the PM's task `do=A`.
-Nothing here is built or published. The patent addendum that must precede any publish is
+Status: **implemented in `src/runtime/wasmer_net.rs` (0.7.6).** Written 2026-10-28 at `main` 288eb26 (0.7.4) for the PM's task `do=A`;
+the sections below are the plan as approved. Not published until the PM publishes. The patent addendum that must precede any publish is
 `docs/PATENT-SWEEP.md`, Addendum 3.
 
 ## Where we are

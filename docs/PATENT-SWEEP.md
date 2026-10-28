@@ -126,3 +126,38 @@ None: no hit overlaps on an independent claim read, and none of the numbered hit
 
 ## Limitations
 Same as the main record. In addition: hit 19 was read in full (all independent claims) from the official publication; hits 20-22 were read in the first independent claims only; three queries for four ideas (idea 16 has no dedicated query beyond Q16); Google "status" values are not the official record and expiry dates were not verified.
+
+---
+
+# Addendum 3: 0.7.4 confining filesystem, and the planned Wasmer network design
+
+Date: 2026-10-28; Run by: wasm-sandbox lane, Claude Sonnet 5.5; Method and caveats as above (AI-assisted; **NOT legal advice; NOT a freedom-to-operate opinion**). Swept at 288eb26 (`main` after #21, the code of 0.7.4) for idea 20, and against `docs/design/wasmer-network.md` (a plan, no code yet) for ideas 17-19. Idea 20 shipped in 0.7.4 without its own sweep; it is recorded here. Required by the PM before any Wasmer-network publish. Hits 1-22 above stand.
+
+## Ideas swept (new since addendum 2)
+17. A decorator over a host virtual-network provider: every socket the guest creates or uses is obtained through a wrapper that applies the address policy of idea 13 on each call (connect to a peer, bind, listen, per-datagram send and receive) before delegating to the real network.
+18. Applying the policy to **incoming** traffic too: closing an accepted connection whose peer address is not allowed, and dropping a received datagram whose source address is not allowed.
+19. Withholding, regardless of the grant, the sockets and operations outside plain TCP/UDP: raw and ICMP sockets, interface, address, route and DHCP configuration, multicast and broadcast (unless the grant is unrestricted).
+20. (0.7.4, shipped) A confining filesystem decorator over a host directory for a sandboxed guest: it refuses every mutation when the grant is read-only, and refuses any path whose canonical real location is outside the granted directory (so a symlink cannot lead out).
+
+## Queries (source, query, date)
+All 2026-10-28, web search restricted to patents.google.com; claims then read with `tools/patent-claims.py` (Google Patents returned 503 for about 30 minutes; retried every 5 minutes until all four fetched).
+- Q17 "patent virtual network wrapper decorator sandbox socket connect bind check destination address allow list each call guest virtual machine" (ideas 17, 13)
+- Q18 "patent filtering incoming datagrams and accepted connections by source address allow list sandboxed application host network proxy" (idea 18)
+- Q19 "patent sandbox file system access path resolved symbolic link real path outside permitted directory deny, read-only mount enforcement" (idea 20)
+- Q20 "patent sandbox deny raw socket ICMP network interface configuration routing DHCP guest, provide only TCP UDP sockets restricted" (idea 19)
+
+## Hits
+| # | patent | title | assignee | status | claim(s) read | overlap | our difference | verdict |
+|---|---|---|---|---|---|---|---|---|
+| 23 | US7216225B2 | Filtered application-to-application communication | Voltaire / Mellanox | Expired - Lifetime (GP; estimate 2023-12-02) | 1, 8, 15, 18 (all independent claims) | A filter applying a policy to a process's communication (ideas 17, 18) | Every independent claim requires a communication interface that **bypasses a portion of the operating-system kernel** and hands filtered data **directly to communication hardware** (multi-channel NIC, InfiniBand in dependents); we filter addresses in user space and delegate to the ordinary kernel network stack. Expired per Google | clear |
+| 24 | US20160191413A1 | Introspection method and apparatus for network access filtering | Nicira / VMware | Active (GP; published application, grant not checked; estimate 2036) | 1 and 13 (both independent claims) | Allow/deny of a guest's network access by policy, decided on the host (ideas 17, 18) | Both independent claims require a **guest introspector installed on the data compute node (a virtual machine) that captures data about the access attempt**, and policies stored on the host examined with that captured data; the dependent claims add filters in the guest network stack, website and file identification. We install nothing in the guest, capture no guest data, and decide from the socket address alone in the host process that serves the guest's calls | clear |
+| 25 | US6003084A | Secure network proxy for connecting entities | Secure Computing / McAfee | Expired - Lifetime (GP) | 1, 9, 10, 16, 22 (all independent claims) | Checking a requester's address against a list of authorized addresses (dependent 11, 17) | Every independent claim requires a **session manager/proxy that establishes two independent connections** (to the requester and to the responder), **simultaneously at a plurality of protocol layers**, with a relay between them; the address check appears only as a dependent step. We terminate no connection, relay nothing and keep one connection per socket. Expired per Google | clear |
+| 26 | US8930346B2 | Symbolic-link identifying | IBM | Expired - Fee Related (GP) | 1 (the only independent claim) | Detecting a symbolic link in a path to keep access inside an export (idea 20) | Claim 1 is a **network file server** that determines an absolute path with no symlinks and **traverses it with `openat()` on each component's file descriptor**, with a parameter that makes the open report a symlink, to find one inserted *after* the path was determined. We resolve the real path once with the standard library (`canonicalize`) and compare it with the granted directory; no network file server, no per-component descriptor traversal, no `openat`. Expired per Google | clear |
+
+Not read (background from snippets only): US20210397467A1 (socket impersonation on VMs), US11113086B1, US11057385B2, US10608881B2, US11336619B2, US11374906B2 (sandbox behind a web proxy), US5802320A, US5915087A, US8363650B2, US6591306B1, US20130340050A1 (zero-configuration communication between a sandboxed program and a networked service), US9542403B2 and US20120203927A1 (same family as hit 26, so likely similar claims), US7809779B2, US6321219B1, US7197516B1. None names WASI, a WebAssembly guest or the decorator/policy mechanisms above in the snippets returned. The unread Apple application US20130340050A1 is the nearest by subject (a sandboxed program reaching a network service) and should be read first if a reviewer wants more than this sweep.
+
+## Needs review (to the PM)
+None of hits 23-26 overlaps on an independent claim read. The "not read" list above is background only; US20130340050A1 is the one worth a human read before the Wasmer-network publish.
+
+## Limitations
+Same as the main record. In addition: four queries for four ideas; each hit's independent claims were read in full, but the "not read" patents were not; Google "status" values are not the official record and expiry dates were not verified; the machine-converted claim text was not compared with the official publication; idea 20 was swept after it shipped.

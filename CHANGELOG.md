@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased] - Plan and patent sweep for network on the Wasmer backend
+
+### Added
+
+- `docs/design/wasmer-network.md`: plan (no code) for enforcing `NetworkCapability` on the Wasmer backend by wrapping wasix's `VirtualNetworking` with the existing `NetworkPolicy`.
+- Third patent sweep addendum in `docs/PATENT-SWEEP.md` (4 hits read in full, none needing review), covering the planned network design and the 0.7.4 confining filesystem (`GrantFs`), which shipped without its own sweep. Not legal advice.
+
 ## [0.7.4] - Unreleased - WASI for the Wasmer backend
 
 ### Added

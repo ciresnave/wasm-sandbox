@@ -10,9 +10,12 @@ use wasmer_wasix::runtime::PluggableRuntime;
 use wasmer_wasix::runtime::task_manager::tokio::TokioTaskManager;
 use wasmer_wasix::virtual_fs::{MountFileSystem, NullFile};
 use wasmer_wasix::virtual_net::UnsupportedVirtualNetworking;
+use wasmer_wasix::virtual_net::host::LocalNetworking;
 
 use crate::error::{Error, Result};
+use crate::runtime::network_policy::NetworkPolicy;
 use crate::runtime::wasmer_fs::GrantFs;
+use crate::runtime::wasmer_net::PolicyNetworking;
 use crate::runtime::{
     ModuleId, RuntimeConfig, RuntimeMetrics, WasmFunctionCaller, WasmFunctionCallerAsync,
     WasmInstance, WasmInstanceState, WasmModule, WasmRuntime,
@@ -95,12 +98,14 @@ impl WasmModule for WasmerModule {
     }
 }
 
-/// What a WASI guest is granted: environment variables and preopened directories. Network and
-/// process grants are rejected before one of these is built, so they never appear here.
+/// What a WASI guest is granted: environment variables, preopened directories and the network
+/// policy. Process grants are rejected before one of these is built, so they never appear here.
 #[derive(Debug, Default)]
 pub(crate) struct WasiGrants {
     envs: Vec<(String, String)>,
     preopens: Vec<crate::runtime::wasmtime::Preopen>,
+    /// `None` means no sockets at all.
+    network: Option<NetworkPolicy>,
 }
 
 /// The tokio runtime wasix runs its tasks on. It lives for the whole process so that dropping a
@@ -128,7 +133,8 @@ fn imports_wasi(module: &Module) -> bool {
 /// Instantiate a WASI module with exactly the granted environment and directories.
 ///
 /// wasix's default runtime would give the guest real host sockets, so the runtime is built by
-/// hand with networking and the HTTP client removed. stdio is null, as in the Wasmtime backend.
+/// hand: networking is the host's only through `PolicyNetworking` (or absent), and the HTTP client
+/// is removed. stdio is null, as in the Wasmtime backend.
 /// The returned `WasiFunctionEnv` must outlive the instance.
 fn instantiate_wasi(
     store: &mut Store,
@@ -139,7 +145,13 @@ fn instantiate_wasi(
     let _guard = wasix_tokio_handle().enter();
     let mut runtime = PluggableRuntime::new(Arc::new(TokioTaskManager::new(wasix_tokio_handle())));
     runtime.set_engine(engine.clone());
-    runtime.set_networking_implementation(UnsupportedVirtualNetworking::default());
+    match &grants.network {
+        Some(policy) => runtime.set_networking_implementation(PolicyNetworking::new(
+            policy.clone(),
+            Arc::new(LocalNetworking::new()),
+        )),
+        None => runtime.set_networking_implementation(UnsupportedVirtualNetworking::default()),
+    };
     runtime.http_client = None;
 
     let mut builder = WasiEnv::builder("sandbox")
@@ -519,17 +531,16 @@ impl WasmerRuntime {
 
     /// Work out what a WASI guest is granted from `capabilities`.
     ///
-    /// Environment variables and directories are applied. Network and process grants are
-    /// rejected: wasix could carry them out, but only with an allowlist this crate has not
-    /// built, and a grant that would be ignored must not read as a working permission.
+    /// Environment variables, directories and the network capability are applied. A process grant
+    /// is rejected: wasix could carry it out, but only with a policy this crate has not built, and
+    /// a grant that would be ignored must not read as a working permission.
     fn create_wasi_env(&self, capabilities: &Capabilities) -> Result<WasiGrants> {
         use crate::security::{EnvironmentCapability, NetworkCapability, ProcessCapability};
 
-        if capabilities.network != NetworkCapability::None {
-            return Err(Error::Capability {
-                message: "a network capability is not supported by the Wasmer backend yet; use NetworkCapability::None or the Wasmtime component backend".to_string(),
-            });
-        }
+        let network = match &capabilities.network {
+            NetworkCapability::None => None,
+            granted => Some(NetworkPolicy::from_capability(granted)?),
+        };
         if capabilities.process != ProcessCapability::None {
             return Err(Error::Capability {
                 message: "a process capability is not supported by the Wasmer backend; use ProcessCapability::None".to_string(),
@@ -556,7 +567,11 @@ impl WasmerRuntime {
                 .collect(),
             EnvironmentCapability::Full => std::env::vars().collect(),
         };
-        Ok(WasiGrants { envs, preopens })
+        Ok(WasiGrants {
+            envs,
+            preopens,
+            network,
+        })
     }
 }
 

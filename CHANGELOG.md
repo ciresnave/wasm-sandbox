@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.6] - Unreleased - Network allowlist on the Wasmer backend
+
+### Added
+
+- `NetworkCapability` is now enforced on the Wasmer backend (`wasmer-runtime`, non-Windows), with the same five variants and meaning as for components. A new `PolicyNetworking` wraps wasix's `VirtualNetworking` and reuses `NetworkPolicy`: every `connect`, `bind`, `listen`, accepted connection (a disallowed peer is closed) and UDP datagram (a datagram from a disallowed source is dropped, a send to one is an error) is checked. Raw and ICMP sockets, interface/route/DHCP changes, multicast and broadcast, and name lookups are refused unless the capability is `Full`. A network grant on Wasmer used to return `Error::Capability`; it now works. `HostSpec.secure` is still rejected.
+- Tests: `tests/wasmer_wasi_test.rs` drives real loopback sockets from a WAT guest for each variant, and unit tests in `runtime::wasmer_net` cover accept, UDP, and that every `VirtualNetworking` method is overridden.
+
+### Changed
+
+- `tests/wasmer_wasi_test.rs`: the old loopback `connect` helper wrote the socket address in the wrong layout (so its "connect refused" check was vacuous); the new helper uses the layout wasix reads, and the no-grant test now proves a correctly addressed connect is refused.
+- Lockfile refreshed (transitive patch updates only).
+
 ## [0.7.5] - Unreleased - Plan and patent sweep for network on the Wasmer backend
 
 ### Added

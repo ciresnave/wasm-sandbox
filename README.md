@@ -229,9 +229,12 @@ The runtime applies the environment allow-list, the fuel budget and filesystem d
 (`readable_dirs` read-only, `writable_dirs` read-write). `network` is enforced for WebAssembly
 **components** (`ComponentRuntime`); for core modules, and for any `process` capability, anything other
 than `None` makes `create_instance` return `Error::Capability` instead of being silently ignored.
-The Wasmer backend (`wasmer-runtime`, non-Windows) applies the environment and directory grants to
-WASI modules too (granted directories appear from fd 4; fd 3 is an empty in-memory root) and gives the
-guest no sockets; it rejects `network` and `process` grants.
+The Wasmer backend (`wasmer-runtime`, non-Windows) applies the environment, directory and `network`
+grants to WASI modules too (granted directories appear from fd 4; fd 3 is an empty in-memory root).
+Its network rules are the component rules: every connect, bind, listen, accepted connection and UDP
+datagram is checked against the capability; raw and ICMP sockets, multicast, broadcast and name lookups
+are refused unless the capability is `Full` (which means TCP and UDP, not raw sockets). With no
+`network` grant the guest has no sockets. It rejects `process` grants.
 See the [Security Configuration guide](docs/guides/security-config.md) and the runnable
 [`examples/security_config.rs`](examples/security_config.rs).
 

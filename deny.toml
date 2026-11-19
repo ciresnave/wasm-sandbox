@@ -8,12 +8,12 @@ version = 2
 # wasmer / wasmtime. Four acknowledged 2026-10-25, pin-utils and chrono 2026-11-19; drop each ignore when upstream moves off it
 # (tracked in ROADMAP.md).
 ignore = [
-    { id = "RUSTSEC-2025-0141", reason = "bincode unmaintained, transitive via wasmer; https://rustsec.org/advisories/RUSTSEC-2025-0141" },
-    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained, transitive; https://rustsec.org/advisories/RUSTSEC-2024-0436" },
-    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 unmaintained, transitive; https://rustsec.org/advisories/RUSTSEC-2026-0173" },
-    { id = "RUSTSEC-2026-0441", reason = "pin-utils unmaintained, transitive via wasmer-wasix; https://rustsec.org/advisories/RUSTSEC-2026-0441" },
-    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, transitive via wasmer-wasix (saffron); our own use was replaced by `time`; https://rustsec.org/advisories/RUSTSEC-2026-0543" },
-    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml unmaintained, transitive; https://rustsec.org/advisories/RUSTSEC-2024-0449" },
+    { id = "RUSTSEC-2025-0141", reason = "bincode via wasmer / wasmer-wasix unmaintained, transitive only; EXPIRES 2026-12-17, re-check then; https://rustsec.org/advisories/RUSTSEC-2025-0141" },
+    { id = "RUSTSEC-2024-0436", reason = "paste via wasmer and wasmtime unmaintained, transitive only; EXPIRES 2026-12-17, re-check then; https://rustsec.org/advisories/RUSTSEC-2024-0436" },
+    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 via wasmer unmaintained, transitive only; EXPIRES 2026-12-17, re-check then; https://rustsec.org/advisories/RUSTSEC-2026-0173" },
+    { id = "RUSTSEC-2026-0441", reason = "pin-utils via wasmer-wasix unmaintained, transitive only; EXPIRES 2026-12-17, re-check then; https://rustsec.org/advisories/RUSTSEC-2026-0441" },
+    { id = "RUSTSEC-2026-0543", reason = "chrono via wasmer-wasix > wasmer-journal/wasmer-config > saffron (cargo tree -i chrono, 2026-11-19); wasm-sandbox itself no longer depends on it unmaintained, transitive only; EXPIRES 2026-12-17, re-check then; https://rustsec.org/advisories/RUSTSEC-2026-0543" },
+    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml via wasmer-wasix unmaintained, transitive only; EXPIRES 2026-12-17, re-check then; https://rustsec.org/advisories/RUSTSEC-2024-0449" },
 ]
 
 [licenses]

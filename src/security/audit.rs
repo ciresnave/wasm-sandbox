@@ -193,9 +193,11 @@ impl AuditLogger {
 
         // Log to stdout if enabled
         if self.log_to_stdout {
-            let timestamp = chrono::DateTime::<chrono::Utc>::from(event.timestamp)
-                .format("%Y-%m-%d %H:%M:%S%.3f")
-                .to_string();
+            let timestamp = time::OffsetDateTime::from(event.timestamp)
+                .format(time::macros::format_description!(
+                    "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:3]"
+                ))
+                .unwrap_or_default();
 
             let level = match event.severity {
                 AuditSeverity::Info => "INFO",

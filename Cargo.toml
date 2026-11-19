@@ -67,7 +67,7 @@ num_cpus = "1.15.0"
 # Additional dependencies
 rand = "0.10.3"
 log = "0.4.20"
-chrono = { version = "0.4.45", features = ["serde"] }
+time = { version = "0.3.55", features = ["formatting", "macros"] }
 toml = "1.1.8"
 
 # wasmer 7 has no native compiler backend on Windows (Cranelift and Singlepass both

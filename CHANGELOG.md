@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.7] - 2026-11-20 - Dependency refresh
+
+### Changed
+
+- wasmtime 50.0.0 -> 50.0.3 (clears 12 wasmtime advisories). `chrono` replaced by `time` (neither appears in the public API; not breaking). Six `cargo deny` ignores, each with its dependency path and expiry 2026-12-17 (chrono remains via wasmer-wasix > wasmer-journal/config > saffron). `cap-std` and the `homepage` field removed from `Cargo.toml`.
+
 ## [0.7.6] - Unreleased - Network allowlist on the Wasmer backend
 
 ### Added

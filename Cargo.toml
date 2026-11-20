@@ -6,7 +6,6 @@ rust-version = "1.97"
 description = "A secure WebAssembly sandbox with dead-simple ease of use, progressive complexity APIs, and comprehensive safety controls"
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/ciresnave/wasm-sandbox"
 repository = "https://github.com/ciresnave/wasm-sandbox"
 documentation = "https://docs.rs/wasm-sandbox"
 keywords = ["wasm", "webassembly", "sandbox", "security", "isolation"]
@@ -53,9 +52,6 @@ anyhow = "1.0.75"
 # Logging and monitoring
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
-
-# Security
-cap-std = "4.0.3"
 
 # Utilities
 uuid = { version = "1.29.0", features = ["v4", "serde"] }

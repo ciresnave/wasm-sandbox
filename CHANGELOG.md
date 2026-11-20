@@ -6,7 +6,7 @@
 
 - wasmtime 50.0.0 -> 50.0.3 (clears 12 wasmtime advisories). `chrono` replaced by `time` (neither appears in the public API; not breaking). Six `cargo deny` ignores, each with its dependency path and expiry 2026-12-17 (chrono remains via wasmer-wasix > wasmer-journal/config > saffron). `cap-std` and the `homepage` field removed from `Cargo.toml`.
 
-## [0.7.6] - Unreleased - Network allowlist on the Wasmer backend
+## [0.7.6] - shipped in 0.7.7 (2026-11-20) - Network allowlist on the Wasmer backend
 
 ### Added
 
@@ -18,14 +18,14 @@
 - `tests/wasmer_wasi_test.rs`: the old loopback `connect` helper wrote the socket address in the wrong layout (so its "connect refused" check was vacuous); the new helper uses the layout wasix reads, and the no-grant test now proves a correctly addressed connect is refused.
 - Lockfile refreshed (transitive patch updates only).
 
-## [0.7.5] - Unreleased - Plan and patent sweep for network on the Wasmer backend
+## [0.7.5] - shipped in 0.7.7 (2026-11-20) - Plan and patent sweep for network on the Wasmer backend
 
 ### Added
 
 - `docs/design/wasmer-network.md`: plan (no code) for enforcing `NetworkCapability` on the Wasmer backend by wrapping wasix's `VirtualNetworking` with the existing `NetworkPolicy`.
 - Third patent sweep addendum in `docs/PATENT-SWEEP.md` (5 hits read in full, none needing review), covering the planned network design and the 0.7.4 confining filesystem (`GrantFs`), which shipped without its own sweep. Not legal advice.
 
-## [0.7.4] - Unreleased - WASI for the Wasmer backend
+## [0.7.4] - 2026-10-26 - WASI for the Wasmer backend
 
 ### Added
 
@@ -38,7 +38,7 @@
 - Network and process grants are still rejected on Wasmer (`Error::Capability`), now with the reason "not supported yet". The guest gets no sockets: wasix's default runtime would hand it host networking, so the runtime is built with networking and the HTTP client removed. stdio is null, as on Wasmtime.
 - Differences from Wasmtime: the first granted directory is fd 4, not fd 3 (fd 3 is an empty in-memory root the guest can use as scratch space; it never touches the host).
 
-## [0.7.3] - Unreleased - Fix memory-growth deadlock
+## [0.7.3] - 2026-10-26 - Fix memory-growth deadlock
 
 ### Fixed
 
@@ -48,7 +48,7 @@
 
 - Dropped wasmtime's `cache` feature (nothing here used the on-disk compilation cache). It was the only path to `zstd 0.13.3`/`zstd-safe 7.3.0`, which `cargo deny` now flags (RUSTSEC-2026-0391, RUSTSEC-2026-0398, RUSTSEC-2026-0403); wasmtime 50.0.0 pins zstd `^0.13`, below the fixed 0.14.3 / zstd-safe 8.2.0, so a lockfile update could not reach them. zstd is no longer in the dependency tree. **The wasmtime compilation cache (`cache` feature) is therefore no longer enabled**; wasm-sandbox never exposed or used it, but an embedder that relied on it through feature unification (their own `wasmtime` dependency) must enable `cache` themselves, accepting zstd 0.13 until wasmtime moves to a fixed zstd.
 
-## [0.7.2] - Unreleased - Patent sweep record: full claim read
+## [0.7.2] - 2026-10-25 - Patent sweep record: full claim read
 
 ### Changed
 

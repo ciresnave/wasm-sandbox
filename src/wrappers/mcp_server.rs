@@ -239,7 +239,7 @@ async fn generate(
     // For now, we just return a simple response
     let response = serde_json::json!({{
         "model": "default-model",
-        "created": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+        "created": match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {{ Ok(d) => d.as_secs() as i64, Err(e) => -(e.duration().as_secs() as i64) }},
         "response": {{
             "content": "This is a placeholder response from the MCP server wrapper.",
         }}

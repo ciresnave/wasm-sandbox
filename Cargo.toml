@@ -1,12 +1,11 @@
 [package]
 name = "wasm-sandbox"
-version = "0.7.6"
+version = "0.7.7"
 edition = "2024"
 rust-version = "1.97"
 description = "A secure WebAssembly sandbox with dead-simple ease of use, progressive complexity APIs, and comprehensive safety controls"
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/ciresnave/wasm-sandbox"
 repository = "https://github.com/ciresnave/wasm-sandbox"
 documentation = "https://docs.rs/wasm-sandbox"
 keywords = ["wasm", "webassembly", "sandbox", "security", "isolation"]
@@ -54,9 +53,6 @@ anyhow = "1.0.75"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
-# Security
-cap-std = "4.0.3"
-
 # Utilities
 uuid = { version = "1.29.0", features = ["v4", "serde"] }
 tempfile = "3.8.0"
@@ -67,7 +63,7 @@ num_cpus = "1.15.0"
 # Additional dependencies
 rand = "0.10.3"
 log = "0.4.20"
-chrono = { version = "0.4.45", features = ["serde"] }
+time = { version = "0.3.55", features = ["formatting", "macros"] }
 toml = "1.1.8"
 
 # wasmer 7 has no native compiler backend on Windows (Cranelift and Singlepass both

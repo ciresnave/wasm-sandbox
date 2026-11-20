@@ -51,11 +51,7 @@ impl NetworkVerifier {
                     }
 
                     // Check secure flag
-                    if !h.secure && secure {
-                        return false;
-                    }
-
-                    true
+                    h.secure || !secure
                 })
             }
             NetworkCapability::AllowedPorts(ports) => {
